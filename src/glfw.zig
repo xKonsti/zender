@@ -1,3 +1,4 @@
+const std = @import("std");
 const c = @cImport({
     @cDefine("GLFW_INCLUDE_NONE", "1");
     @cInclude("GLFW/glfw3.h");
@@ -47,10 +48,12 @@ pub const Window = struct {
         return c.glfwWindowShouldClose(self.handle) == c.GLFW_TRUE;
     }
 
-    pub fn windowSize(self: *Window) Dimensions {
+    /// this is basically the window size
+    pub inline fn bufferSize(self: *Window) Dimensions {
         var w: c_int = 0;
         var h: c_int = 0;
-        c.glfwGetWindowSize(self.handle, &w, &h);
+        // c.glfwGetWindowSize(self.handle, &w, &h);
+        c.glfwGetFramebufferSize(self.handle, &w, &h);
         return Dimensions{ .w = @intCast(w), .h = @intCast(h) };
     }
 
