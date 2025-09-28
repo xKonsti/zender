@@ -52,8 +52,9 @@ pub fn main() !void {
         program.use();
         const dims = window.bufferSize();
         gl.Uniform2f(u_window_size_loc, @floatFromInt(dims.w), @floatFromInt(dims.h));
+        const scale = window.getContentScale();
 
-        renderer.begin();
+        renderer.begin(scale.w, scale.h);
         renderer.drawRect(0, 0, 200, 50, .{ 1.3, 0.5, 0.0, 1.0 });
         renderer.drawRect(0, 0, 100, 100, .{ 0.0, 0.0, 1.0, 1.0 });
         renderer.drawRect(100, 100, 200, 50, .{ 1.0, 0.5, 0.0, 1.0 });

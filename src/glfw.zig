@@ -60,4 +60,11 @@ pub const Window = struct {
     pub fn swapBuffers(self: *Window) void {
         c.glfwSwapBuffers(self.handle);
     }
+
+    pub inline fn getContentScale(self: *Window) Dimensions {
+        var x: f32 = 0;
+        var y: f32 = 0;
+        c.glfwGetWindowContentScale(self.handle, &x, &y);
+        return .{ .w = @intFromFloat(x), .h = @intFromFloat(y) };
+    }
 };

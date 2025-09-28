@@ -69,7 +69,7 @@ comptime {
     assert(@offsetOf(Vertex, "color") == 3 * @sizeOf(f32));
 }
 
-pub const MAX_RECTANGLES = 1_000;
+pub const MAX_RECTANGLES = 10_000;
 pub const MAX_VERTICES = MAX_RECTANGLES * 4;
 pub const MAX_INDICES = MAX_RECTANGLES * 6;
 
@@ -77,6 +77,9 @@ pub const Renderer2D = struct {
     vao: c_uint,
     vbo: c_uint,
     ibo: c_uint,
+
+    window_scale_x: u32,
+    window_scale_y: u32,
 
     vertexData: [MAX_VERTICES]Vertex,
     indexData: [MAX_INDICES]c_uint,
@@ -115,12 +118,16 @@ pub const Renderer2D = struct {
             .indexData = std.mem.zeroes([MAX_INDICES]c_uint),
             .vertexCount = 0,
             .indexCount = 0,
+            .window_scale_x = 1,
+            .window_scale_y = 1,
         };
     }
 
-    pub fn begin(self: *Renderer2D) void {
+    pub fn begin(self: *Renderer2D, window_scale_x: u32, window_scale_y: u32) void {
         self.vertexCount = 0;
         self.indexCount = 0;
+        self.window_scale_x = window_scale_x;
+        self.window_scale_y = window_scale_y;
     }
 
     pub fn drawRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, color: [4]f32) void {
@@ -130,10 +137,13 @@ pub const Renderer2D = struct {
             return;
         }
 
-        const x0 = x;
-        const y0 = y;
-        const x1 = x + w;
-        const y1 = y + h;
+        const scale_x = @as(f32, @floatFromInt(self.window_scale_x));
+        const scale_y = @as(f32, @floatFromInt(self.window_scale_y));
+
+        const x0 = x * scale_x;
+        const y0 = y * scale_y;
+        const x1 = (x + w) * scale_x;
+        const y1 = (y + h) * scale_y;
         const z = 0.0;
 
         const base: c_uint = @intCast(self.vertexCount);
@@ -156,6 +166,14 @@ pub const Renderer2D = struct {
         self.indexCount += 6;
     }
 
+    pub fn drawRoundedRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]f32) void {
+        if (self.vertexCount + 4 > MAX_VERTICES or self.indexCount + 6 > MAX_INDICES) {
+            std.log.err("Vertex buffer or index buffer overflow", .{});
+            std.debug.print("Vertex count: {d}, Index count: {d}\n", .{ self.vertexCount, self.indexCount });
+            return;
+        }
+    }
+
     pub fn end(self: *Renderer2D) void {
         gl.BindVertexArray(self.vao);
 
@@ -167,4 +185,5 @@ pub const Renderer2D = struct {
 
         gl.DrawElements(gl.TRIANGLES, @intCast(self.indexCount), gl.UNSIGNED_INT, 0);
     }
+
 };
