@@ -5,21 +5,26 @@ pub const gl = @import("gl");
 pub const Program = struct {
     id: c_uint,
 
+    u_window_size_loc: c_int,
+    u_rect_pos_loc: c_int,
+    u_rect_size_loc: c_int,
+    u_radius_loc: c_int,
+
     pub fn init(comptime vertex_shader_src: []const u8, comptime fragment_shader_src: []const u8) !Program {
-        const program = gl.CreateProgram();
+        const program_id = gl.CreateProgram();
 
         const vs = try compileShader(gl.VERTEX_SHADER, vertex_shader_src);
         const fs = try compileShader(gl.FRAGMENT_SHADER, fragment_shader_src);
 
-        gl.AttachShader(program, vs);
-        gl.AttachShader(program, fs);
-        gl.LinkProgram(program);
+        gl.AttachShader(program_id, vs);
+        gl.AttachShader(program_id, fs);
+        gl.LinkProgram(program_id);
 
         var success: c_int = undefined;
         var info_log: [512]u8 = undefined;
-        gl.GetProgramiv(program, gl.LINK_STATUS, (&success)[0..1]);
+        gl.GetProgramiv(program_id, gl.LINK_STATUS, (&success)[0..1]);
         if (success == 0) {
-            gl.GetProgramInfoLog(program, info_log.len, null, info_log[0..]);
+            gl.GetProgramInfoLog(program_id, info_log.len, null, info_log[0..]);
             std.log.err("Program link error: {s}", .{info_log});
             return error.ProgramLinkFailed;
         }
@@ -27,7 +32,13 @@ pub const Program = struct {
         gl.DeleteProgram(vs);
         gl.DeleteProgram(fs);
 
-        return Program{ .id = program };
+        return .{
+            .id = program_id,
+            .u_window_size_loc = gl.GetUniformLocation(program_id, "uWindowSize"),
+            .u_rect_pos_loc = gl.GetUniformLocation(program_id, "uRectPos"),
+            .u_rect_size_loc = gl.GetUniformLocation(program_id, "uRectSize"),
+            .u_radius_loc = gl.GetUniformLocation(program_id, "uRadius"),
+        };
     }
 
     pub inline fn deinit(self: Program) void {
@@ -74,6 +85,8 @@ pub const MAX_VERTICES = MAX_RECTANGLES * 4;
 pub const MAX_INDICES = MAX_RECTANGLES * 6;
 
 pub const Renderer2D = struct {
+    program: Program,
+
     vao: c_uint,
     vbo: c_uint,
     ibo: c_uint,
@@ -86,7 +99,7 @@ pub const Renderer2D = struct {
     vertexCount: usize,
     indexCount: usize,
 
-    pub fn init() !Renderer2D {
+    pub fn init(program: Program) !Renderer2D {
         var vao: c_uint = undefined;
         gl.GenVertexArrays(1, (&vao)[0..1]);
         gl.BindVertexArray(vao);
@@ -111,6 +124,7 @@ pub const Renderer2D = struct {
         gl.EnableVertexAttribArray(1);
 
         return Renderer2D{
+            .program = program,
             .vao = vao,
             .vbo = vbo,
             .ibo = ibo,
@@ -131,6 +145,16 @@ pub const Renderer2D = struct {
     }
 
     pub fn drawRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, color: [4]f32) void {
+        if (self.vertexCount + 4 > MAX_VERTICES or self.indexCount + 6 > MAX_INDICES) {
+            std.log.err("Vertex buffer or index buffer overflow", .{});
+            std.debug.print("Vertex count: {d}, Index count: {d}\n", .{ self.vertexCount, self.indexCount });
+            return;
+        }
+
+        drawRoundedRect(self, x, y, w, h, 0.0, color);
+    }
+
+    pub fn drawRoundedRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]f32) void {
         if (self.vertexCount + 4 > MAX_VERTICES or self.indexCount + 6 > MAX_INDICES) {
             std.log.err("Vertex buffer or index buffer overflow", .{});
             std.debug.print("Vertex count: {d}, Index count: {d}\n", .{ self.vertexCount, self.indexCount });
@@ -164,14 +188,12 @@ pub const Renderer2D = struct {
 
         self.vertexCount += 4;
         self.indexCount += 6;
-    }
 
-    pub fn drawRoundedRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]f32) void {
-        if (self.vertexCount + 4 > MAX_VERTICES or self.indexCount + 6 > MAX_INDICES) {
-            std.log.err("Vertex buffer or index buffer overflow", .{});
-            std.debug.print("Vertex count: {d}, Index count: {d}\n", .{ self.vertexCount, self.indexCount });
-            return;
-        }
+        gl.Uniform2f(self.program.u_rect_pos_loc, x, y);
+        gl.Uniform2f(self.program.u_rect_size_loc, w, h);
+        gl.Uniform1f(self.program.u_radius_loc, r);
+
+        self.drawRect(x, y, w, h, color);
     }
 
     pub fn end(self: *Renderer2D) void {
@@ -185,5 +207,4 @@ pub const Renderer2D = struct {
 
         gl.DrawElements(gl.TRIANGLES, @intCast(self.indexCount), gl.UNSIGNED_INT, 0);
     }
-
 };

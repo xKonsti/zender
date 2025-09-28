@@ -35,11 +35,11 @@ pub fn main() !void {
     defer program.deinit();
 
     // const uProjectionLoc = program.uniformLocation("uProjection");
-    var renderer = glWrapper.Renderer2D.init() catch |err| {
+    var renderer = glWrapper.Renderer2D.init(program) catch |err| {
         std.debug.print("Error in init Renderer2D: {t}\n", .{err});
         return;
     };
-    const u_window_size_loc = program.uniformLocation("uWindowSize");
+
     // Main loop
     while (!window.shouldClose()) {
         const now = std.time.milliTimestamp();
@@ -51,7 +51,7 @@ pub fn main() !void {
 
         program.use();
         const dims = window.bufferSize();
-        gl.Uniform2f(u_window_size_loc, @floatFromInt(dims.w), @floatFromInt(dims.h));
+        gl.Uniform2f(program.u_window_size_loc, @floatFromInt(dims.w), @floatFromInt(dims.h));
         const scale = window.getContentScale();
 
         renderer.begin(scale.w, scale.h);
