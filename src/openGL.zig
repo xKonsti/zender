@@ -6,9 +6,11 @@ pub const Program = struct {
     id: c_uint,
 
     u_window_size_loc: c_int,
-    u_rect_pos_loc: c_int,
+    u_rect_center_loc: c_int,
     u_rect_size_loc: c_int,
-    u_radius_loc: c_int,
+    u_rect_radius_loc: c_int,
+    u_border_width_loc: c_int,
+    u_border_color_loc: c_int,
 
     pub fn init(comptime vertex_shader_src: []const u8, comptime fragment_shader_src: []const u8) !Program {
         const program_id = gl.CreateProgram();
@@ -35,9 +37,11 @@ pub const Program = struct {
         return .{
             .id = program_id,
             .u_window_size_loc = gl.GetUniformLocation(program_id, "uWindowSize"),
-            .u_rect_pos_loc = gl.GetUniformLocation(program_id, "uRectPos"),
+            .u_rect_center_loc = gl.GetUniformLocation(program_id, "uRectCenter"),
             .u_rect_size_loc = gl.GetUniformLocation(program_id, "uRectSize"),
-            .u_radius_loc = gl.GetUniformLocation(program_id, "uRadius"),
+            .u_rect_radius_loc = gl.GetUniformLocation(program_id, "uCornerRadius"),
+            .u_border_width_loc = gl.GetUniformLocation(program_id, "uBorderWidth"),
+            .u_border_color_loc = gl.GetUniformLocation(program_id, "uBorderColor"),
         };
     }
 
@@ -73,11 +77,33 @@ pub const Program = struct {
 const Vertex = struct {
     pos: [3]f32,
     color: [4]f32,
+    rect_center: [2]f32,
+    rect_size: [2]f32,
+    corner_radius: f32,
+    border_width: f32,
+    border_color: [4]f32,
+
+    fn fromRect(x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]f32) Vertex {
+        return Vertex{
+            .pos = .{ x, y, 0 },
+            .color = color,
+            .rect_center = .{ x + w / 2, y + h / 2 },
+            .rect_size = .{ w, h },
+            .corner_radius = r,
+            .border_width = 0,
+            .border_color = .{ 0, 0, 0, 0 },
+        };
+    }
 };
 
 comptime {
     assert(@offsetOf(Vertex, "pos") == 0);
     assert(@offsetOf(Vertex, "color") == 3 * @sizeOf(f32));
+    assert(@offsetOf(Vertex, "rect_center") == (3 + 4) * @sizeOf(f32));
+    assert(@offsetOf(Vertex, "rect_size") == (3 + 4 + 2) * @sizeOf(f32));
+    assert(@offsetOf(Vertex, "corner_radius") == (3 + 4 + 2 + 2) * @sizeOf(f32));
+    assert(@offsetOf(Vertex, "border_width") == (3 + 4 + 2 + 2 + 1) * @sizeOf(f32));
+    assert(@offsetOf(Vertex, "border_color") == (3 + 4 + 2 + 2 + 1 + 1) * @sizeOf(f32));
 }
 
 pub const MAX_RECTANGLES = 10_000;
@@ -122,6 +148,24 @@ pub const Renderer2D = struct {
 
         gl.VertexAttribPointer(1, 4, gl.FLOAT, gl.FALSE, stride, @offsetOf(Vertex, "color"));
         gl.EnableVertexAttribArray(1);
+
+        gl.VertexAttribPointer(2, 2, gl.FLOAT, gl.FALSE, stride, @offsetOf(Vertex, "rect_center"));
+        gl.EnableVertexAttribArray(2);
+
+        gl.VertexAttribPointer(3, 2, gl.FLOAT, gl.FALSE, stride, @offsetOf(Vertex, "rect_size"));
+        gl.EnableVertexAttribArray(3);
+
+        gl.VertexAttribPointer(4, 1, gl.FLOAT, gl.FALSE, stride, @offsetOf(Vertex, "corner_radius"));
+        gl.EnableVertexAttribArray(4);
+
+        gl.VertexAttribPointer(5, 1, gl.FLOAT, gl.FALSE, stride, @offsetOf(Vertex, "border_width"));
+        gl.EnableVertexAttribArray(5);
+
+        gl.VertexAttribPointer(6, 4, gl.FLOAT, gl.FALSE, stride, @offsetOf(Vertex, "border_color"));
+        gl.EnableVertexAttribArray(6);
+
+        gl.Enable(gl.BLEND);
+        gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
         return Renderer2D{
             .program = program,
@@ -168,15 +212,14 @@ pub const Renderer2D = struct {
         const y0 = y * scale_y;
         const x1 = (x + w) * scale_x;
         const y1 = (y + h) * scale_y;
-        const z = 0.0;
 
         const base: c_uint = @intCast(self.vertexCount);
 
-        self.vertexData[self.vertexCount + 0] = Vertex{ .pos = .{ x0, y0, z }, .color = color };
+        self.vertexData[self.vertexCount + 0] = .fromRect(x0, y0, w, h, r, color);
         // 4 vertices
-        self.vertexData[self.vertexCount + 1] = Vertex{ .pos = .{ x1, y0, z }, .color = color };
-        self.vertexData[self.vertexCount + 2] = Vertex{ .pos = .{ x1, y1, z }, .color = color };
-        self.vertexData[self.vertexCount + 3] = Vertex{ .pos = .{ x0, y1, z }, .color = color };
+        self.vertexData[self.vertexCount + 1] = .fromRect(x1, y0, w, h, r, color);
+        self.vertexData[self.vertexCount + 2] = .fromRect(x1, y1, w, h, r, color);
+        self.vertexData[self.vertexCount + 3] = .fromRect(x0, y1, w, h, r, color);
 
         // 6 indices
         self.indexData[self.indexCount + 0] = base + 0;
@@ -189,11 +232,14 @@ pub const Renderer2D = struct {
         self.vertexCount += 4;
         self.indexCount += 6;
 
-        gl.Uniform2f(self.program.u_rect_pos_loc, x, y);
-        gl.Uniform2f(self.program.u_rect_size_loc, w, h);
-        gl.Uniform1f(self.program.u_radius_loc, r);
+        const center_x = x0 + w / 2;
+        const center_y = y0 + h / 2;
 
-        self.drawRect(x, y, w, h, color);
+        gl.Uniform2f(self.program.u_rect_size_loc, w, h);
+        gl.Uniform1f(self.program.u_rect_radius_loc, r);
+        gl.Uniform4f(self.program.u_border_color_loc, 1, 0, 0, 1);
+        gl.Uniform1f(self.program.u_border_width_loc, 0);
+        gl.Uniform2f(self.program.u_rect_center_loc, center_x, center_y);
     }
 
     pub fn end(self: *Renderer2D) void {
