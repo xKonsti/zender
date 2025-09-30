@@ -10,11 +10,6 @@ pub const makeContextCurrent = c.glfwMakeContextCurrent;
 pub const pollEvents = c.glfwPollEvents;
 pub const getProcAddress = c.glfwGetProcAddress;
 
-const Dimensions = struct {
-    w: u32,
-    h: u32,
-};
-
 pub fn init() !void {
     if (c.glfwInit() != c.GLFW_TRUE) {
         return error.InitFailed;
@@ -40,31 +35,56 @@ pub const Window = struct {
         return Window{ .handle = handle };
     }
 
-    pub fn deinit(self: *Window) void {
+    pub inline fn deinit(self: Window) void {
         c.glfwDestroyWindow(self.handle);
     }
 
-    pub fn shouldClose(self: *Window) bool {
+    pub inline fn shouldClose(self: Window) bool {
         return c.glfwWindowShouldClose(self.handle) == c.GLFW_TRUE;
     }
 
-    /// this is basically the window size
-    pub inline fn bufferSize(self: *Window) Dimensions {
+    /// this is basically the window size with respect to the content scale
+    pub inline fn bufferSize(self: Window) [2]u32 {
         var w: c_int = 0;
         var h: c_int = 0;
         // c.glfwGetWindowSize(self.handle, &w, &h);
         c.glfwGetFramebufferSize(self.handle, &w, &h);
-        return Dimensions{ .w = @intCast(w), .h = @intCast(h) };
+        return .{ @intCast(w), @intCast(h) };
     }
 
-    pub fn swapBuffers(self: *Window) void {
+    pub inline fn windowSize(self: Window) [2]u32 {
+        var w: c_int = 0;
+        var h: c_int = 0;
+        c.glfwGetWindowSize(self.handle, &w, &h);
+        return .{ @intCast(w), @intCast(h) };
+    }
+
+    pub inline fn swapBuffers(self: Window) void {
         c.glfwSwapBuffers(self.handle);
     }
 
-    pub inline fn getContentScale(self: *Window) Dimensions {
+    pub inline fn getContentScale(self: Window) [2]f32 {
         var x: f32 = 0;
         var y: f32 = 0;
         c.glfwGetWindowContentScale(self.handle, &x, &y);
-        return .{ .w = @intFromFloat(x), .h = @intFromFloat(y) };
+        return .{ x, y };
     }
+
+    pub fn mousePos(self: Window) [2]f64 {
+        var x: f64 = 0;
+        var y: f64 = 0;
+        c.glfwGetCursorPos(self.handle, &x, &y);
+        return .{ x, y };
+    }
+
+    const CursorIcons = enum(c_int) {
+        Arrow = c.GLFW_ARROW_CURSOR,
+        IBeam = c.GLFW_IBEAM_CURSOR,
+        Crosshair = c.GLFW_CROSSHAIR_CURSOR,
+        HResize = c.GLFW_HRESIZE_CURSOR,
+        VResize = c.GLFW_VRESIZE_CURSOR,
+        ResizeAll = c.GLFW_RESIZE_ALL_CURSOR,
+        NotAllowed = c.GLFW_NOT_ALLOWED_CURSOR,
+        PointingHand = c.GLFW_POINTING_HAND_CURSOR,
+    };
 };

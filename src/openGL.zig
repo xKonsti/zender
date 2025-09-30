@@ -5,12 +5,7 @@ pub const gl = @import("gl");
 pub const Program = struct {
     id: c_uint,
 
-    u_window_size_loc: c_int,
-    u_rect_center_loc: c_int,
-    u_rect_size_loc: c_int,
-    u_rect_radius_loc: c_int,
-    u_border_width_loc: c_int,
-    u_border_color_loc: c_int,
+    window_size_loc: c_int,
 
     pub fn init(comptime vertex_shader_src: []const u8, comptime fragment_shader_src: []const u8) !Program {
         const program_id = gl.CreateProgram();
@@ -36,12 +31,7 @@ pub const Program = struct {
 
         return .{
             .id = program_id,
-            .u_window_size_loc = gl.GetUniformLocation(program_id, "uWindowSize"),
-            .u_rect_center_loc = gl.GetUniformLocation(program_id, "uRectCenter"),
-            .u_rect_size_loc = gl.GetUniformLocation(program_id, "uRectSize"),
-            .u_rect_radius_loc = gl.GetUniformLocation(program_id, "uCornerRadius"),
-            .u_border_width_loc = gl.GetUniformLocation(program_id, "uBorderWidth"),
-            .u_border_color_loc = gl.GetUniformLocation(program_id, "uBorderColor"),
+            .window_size_loc = gl.GetUniformLocation(program_id, "window_size"),
         };
     }
 
@@ -75,7 +65,7 @@ pub const Program = struct {
 };
 
 const Vertex = struct {
-    pos: [3]f32,
+    pos: [2]f32,
     color: [4]f32,
     rect_center: [2]f32,
     rect_size: [2]f32,
@@ -85,7 +75,7 @@ const Vertex = struct {
 
     fn fromRect(x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]f32) Vertex {
         return Vertex{
-            .pos = .{ x, y, 0 },
+            .pos = .{ x, y },
             .color = color,
             .rect_center = .{ x + w / 2, y + h / 2 },
             .rect_size = .{ w, h },
@@ -94,17 +84,17 @@ const Vertex = struct {
             .border_color = .{ 0, 0, 0, 0 },
         };
     }
-};
 
-comptime {
-    assert(@offsetOf(Vertex, "pos") == 0);
-    assert(@offsetOf(Vertex, "color") == 3 * @sizeOf(f32));
-    assert(@offsetOf(Vertex, "rect_center") == (3 + 4) * @sizeOf(f32));
-    assert(@offsetOf(Vertex, "rect_size") == (3 + 4 + 2) * @sizeOf(f32));
-    assert(@offsetOf(Vertex, "corner_radius") == (3 + 4 + 2 + 2) * @sizeOf(f32));
-    assert(@offsetOf(Vertex, "border_width") == (3 + 4 + 2 + 2 + 1) * @sizeOf(f32));
-    assert(@offsetOf(Vertex, "border_color") == (3 + 4 + 2 + 2 + 1 + 1) * @sizeOf(f32));
-}
+    comptime {
+        assert(@offsetOf(Vertex, "pos") == 0);
+        assert(@offsetOf(Vertex, "color") == 2 * @sizeOf(f32));
+        assert(@offsetOf(Vertex, "rect_center") == (2 + 4) * @sizeOf(f32));
+        assert(@offsetOf(Vertex, "rect_size") == (2 + 4 + 2) * @sizeOf(f32));
+        assert(@offsetOf(Vertex, "corner_radius") == (2 + 4 + 2 + 2) * @sizeOf(f32));
+        assert(@offsetOf(Vertex, "border_width") == (2 + 4 + 2 + 2 + 1) * @sizeOf(f32));
+        assert(@offsetOf(Vertex, "border_color") == (2 + 4 + 2 + 2 + 1 + 1) * @sizeOf(f32));
+    }
+};
 
 pub const MAX_RECTANGLES = 10_000;
 pub const MAX_VERTICES = MAX_RECTANGLES * 4;
@@ -115,10 +105,10 @@ pub const Renderer2D = struct {
 
     vao: c_uint,
     vbo: c_uint,
-    ibo: c_uint,
+    ebo: c_uint,
 
-    window_scale_x: u32,
-    window_scale_y: u32,
+    window_scale_x: f32,
+    window_scale_y: f32,
 
     vertexData: [MAX_VERTICES]Vertex,
     indexData: [MAX_INDICES]c_uint,
@@ -142,8 +132,7 @@ pub const Renderer2D = struct {
 
         const stride: c_uint = @sizeOf(Vertex);
 
-        // vertex attribs: pos (3 floats), color (4 floats)
-        gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, stride, 0);
+        gl.VertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, stride, @offsetOf(Vertex, "pos"));
         gl.EnableVertexAttribArray(0);
 
         gl.VertexAttribPointer(1, 4, gl.FLOAT, gl.FALSE, stride, @offsetOf(Vertex, "color"));
@@ -171,9 +160,9 @@ pub const Renderer2D = struct {
             .program = program,
             .vao = vao,
             .vbo = vbo,
-            .ibo = ibo,
-            .vertexData = std.mem.zeroes([MAX_VERTICES]Vertex),
-            .indexData = std.mem.zeroes([MAX_INDICES]c_uint),
+            .ebo = ibo,
+            .vertexData = undefined,
+            .indexData = undefined,
             .vertexCount = 0,
             .indexCount = 0,
             .window_scale_x = 1,
@@ -181,7 +170,7 @@ pub const Renderer2D = struct {
         };
     }
 
-    pub fn begin(self: *Renderer2D, window_scale_x: u32, window_scale_y: u32) void {
+    pub fn begin(self: *Renderer2D, window_scale_x: f32, window_scale_y: f32) void {
         self.vertexCount = 0;
         self.indexCount = 0;
         self.window_scale_x = window_scale_x;
@@ -205,21 +194,24 @@ pub const Renderer2D = struct {
             return;
         }
 
-        const scale_x = @as(f32, @floatFromInt(self.window_scale_x));
-        const scale_y = @as(f32, @floatFromInt(self.window_scale_y));
+        const scale_x: f32 = self.window_scale_x;
+        const scale_y: f32 = self.window_scale_y;
 
-        const x0 = x * scale_x;
-        const y0 = y * scale_y;
-        const x1 = (x + w) * scale_x;
-        const y1 = (y + h) * scale_y;
+        const tl_x = x * scale_x;
+        const tl_y = y * scale_y;
+        const br_x = (x + w) * scale_x;
+        const br_y = (y + h) * scale_y;
+
+        const width_scaled = w * scale_x;
+        const height_scaled = h * scale_y;
 
         const base: c_uint = @intCast(self.vertexCount);
 
-        self.vertexData[self.vertexCount + 0] = .fromRect(x0, y0, w, h, r, color);
         // 4 vertices
-        self.vertexData[self.vertexCount + 1] = .fromRect(x1, y0, w, h, r, color);
-        self.vertexData[self.vertexCount + 2] = .fromRect(x1, y1, w, h, r, color);
-        self.vertexData[self.vertexCount + 3] = .fromRect(x0, y1, w, h, r, color);
+        self.vertexData[self.vertexCount + 0] = .fromRect(tl_x, tl_y, width_scaled, height_scaled, r, color);
+        self.vertexData[self.vertexCount + 1] = .fromRect(br_x, tl_y, width_scaled, height_scaled, r, color);
+        self.vertexData[self.vertexCount + 2] = .fromRect(br_x, br_y, width_scaled, height_scaled, r, color);
+        self.vertexData[self.vertexCount + 3] = .fromRect(tl_x, br_y, width_scaled, height_scaled, r, color);
 
         // 6 indices
         self.indexData[self.indexCount + 0] = base + 0;
@@ -231,15 +223,6 @@ pub const Renderer2D = struct {
 
         self.vertexCount += 4;
         self.indexCount += 6;
-
-        const center_x = x0 + w / 2;
-        const center_y = y0 + h / 2;
-
-        gl.Uniform2f(self.program.u_rect_size_loc, w, h);
-        gl.Uniform1f(self.program.u_rect_radius_loc, r);
-        gl.Uniform4f(self.program.u_border_color_loc, 1, 0, 0, 1);
-        gl.Uniform1f(self.program.u_border_width_loc, 0);
-        gl.Uniform2f(self.program.u_rect_center_loc, center_x, center_y);
     }
 
     pub fn end(self: *Renderer2D) void {
@@ -248,7 +231,7 @@ pub const Renderer2D = struct {
         gl.BindBuffer(gl.ARRAY_BUFFER, self.vbo);
         gl.BufferSubData(gl.ARRAY_BUFFER, 0, @intCast(@sizeOf(Vertex) * self.vertexCount), &self.vertexData[0]);
 
-        gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, self.ibo);
+        gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, self.ebo);
         gl.BufferSubData(gl.ELEMENT_ARRAY_BUFFER, 0, @intCast(@sizeOf(c_uint) * self.indexCount), &self.indexData[0]);
 
         gl.DrawElements(gl.TRIANGLES, @intCast(self.indexCount), gl.UNSIGNED_INT, 0);

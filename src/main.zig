@@ -22,7 +22,7 @@ pub fn main() !void {
     defer window.deinit();
 
     glfw.makeContextCurrent(window.handle);
-    glfw.swapInterval(0);
+    glfw.swapInterval(1);
 
     // Initialize OpenGL function table
     if (!procs.init(glfw.getProcAddress)) {
@@ -45,23 +45,26 @@ pub fn main() !void {
         const now = std.time.milliTimestamp();
         defer std.debug.print("Frame took {d}ms\n", .{std.time.milliTimestamp() - now});
 
+        // const mouse_pos = window.mousePos();
+        // std.debug.print("Mouse pos: {d}, {d}\n", .{ mouse_pos[0], mouse_pos[1] });
+
         // Clear screen
         gl.ClearColor(0.2, 0.3, 0.3, 1.0);
         gl.Clear(gl.COLOR_BUFFER_BIT);
 
         program.use();
         const dims = window.bufferSize();
-        gl.Uniform2f(program.u_window_size_loc, @floatFromInt(dims.w), @floatFromInt(dims.h));
+        gl.Uniform2f(program.window_size_loc, @floatFromInt(dims[0]), @floatFromInt(dims[1]));
         const scale = window.getContentScale();
 
-        renderer.begin(scale.w, scale.h);
-        renderer.drawRect(0, 0, 200, 50, .{ 1.0, 0.5, 0.0, 1.0 });
-        renderer.drawRect(0, 0, 100, 100, .{ 0.0, 0.0, 1.0, 1.0 });
-        renderer.drawRect(100, 100, 200, 50, .{ 1.0, 0.5, 0.0, 1.0 });
-        renderer.drawRect(350, 100, 100, 100, .{ 0.2, 0.8, 0.3, 1.0 });
+        renderer.begin(scale[0], scale[1]);
+        // renderer.drawRect(0, 0, 200, 50, .{ 1.0, 0.5, 0.0, 1.0 });
+        // renderer.drawRect(0, 0, 100, 100, .{ 0.0, 0.0, 1.0, 1.0 });
+        // renderer.drawRect(100, 100, 200, 50, .{ 1.0, 0.5, 0.0, 1.0 });
+        // renderer.drawRect(350, 100, 100, 100, .{ 0.2, 0.8, 0.3, 1.0 });
 
-        renderer.drawRoundedRect(100, 100, 400, 300, 10, .{ 1.0, 0.0, 0.0, 1.0 });
-        renderer.drawRoundedRect(0, 0, 100, 100, 10, .{ 1.0, 0.0, 0.0, 1.0 });
+        renderer.drawRoundedRect(100, 100, 400, 300, 120, .{ 1.0, 0.0, 0.0, 1.0 });
+        // renderer.drawRoundedRect(0, 0, 100, 100, 10, .{ 1.0, 0.0, 0.0, 1.0 });
         renderer.end();
 
         // Swap buffers & poll events

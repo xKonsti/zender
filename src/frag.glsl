@@ -1,54 +1,56 @@
 #version 410 core
 
-in vec4 FragColor;                       // Color from vertex shader
-in vec2 FragCoord;                       // Window-space coordinates from vertex shader
+in vec2 rect_pos;
+flat in vec2 rect_center;
+flat in vec2 rect_size;
+flat in vec4 rect_color;
+flat in float corner_radius;
 
-out vec4 color;                          // Final output color
+uniform vec2 window_size;
 
-// Uniforms for rectangle parameters
-uniform vec2 uRectCenter;                // Center of the rectangle in window coordinates
-uniform vec2 uRectSize;                  // Full width and height of the rectangle
-uniform float uCornerRadius;             // Corner radius
-uniform float uBorderWidth;              // Optional: border width (0.0 for filled rectangle)
-uniform vec4 uBorderColor;               // Optional: border color
+out vec4 out_color;
 
-// Signed distance function for a rounded rectangle
-float sdRoundedRect(vec2 p, vec2 b, float r) {
-    vec2 q = abs(p) - b + r;
-    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+float RoundedRectSDF(vec2 sample_pos, vec2 rect_center, vec2 rect_half_size, float r) {
+    vec2 distance2 = abs(rect_center - sample_pos) - rect_half_size + vec2(r, r);
+    return 
+        min(max(distance2.x, distance2.y), 0.0)  // neg - 0 for inside
+        + length(max(distance2, 0.0))               // 0 - pos for outside
+        - r;                                        // - r for rounded corners
 }
 
 void main() {
-    // Calculate position relative to rectangle center
-    vec2 p = FragCoord - uRectCenter;
+    float softness = 1.0;
+    float distance = RoundedRectSDF(rect_pos, rect_center, rect_size / 2, corner_radius);
+    // if (corner_radius == 120) discard;
+    // if (distance > 0.0) 
+    //     discard;
+    // if (corner_radius == 0) discard;
     
-    // Calculate half-size of the rectangle
-    vec2 halfSize = uRectSize * 0.5;
-    
-    // Calculate the signed distance to the rounded rectangle
-    float d = sdRoundedRect(p, halfSize, uCornerRadius);
-    
-    // Calculate anti-aliasing factor
-    float aa = fwidth(d);
-    
-    if (uBorderWidth > 0.0) {
-        // Render with border
-        float outerD = d;
-        float innerD = sdRoundedRect(p, halfSize - vec2(uBorderWidth), max(0.0, uCornerRadius - uBorderWidth));
-        
-        // Anti-aliased border
-        float outerAlpha = 1.0 - smoothstep(-aa, aa, outerD);
-        float innerAlpha = 1.0 - smoothstep(-aa, aa, innerD);
-        float borderAlpha = outerAlpha - innerAlpha;
-        
-        // Mix fill and border colors
-        vec4 fillColor = FragColor;
-        vec4 finalColor = mix(fillColor, uBorderColor, borderAlpha / max(outerAlpha, 0.001));
-        
-        color = vec4(finalColor.rgb, finalColor.a * outerAlpha);
-    } else {
-        // Simple filled rectangle with anti-aliasing
-        float alpha = 1.0 - smoothstep(-aa, aa, d);
-        color = vec4(FragColor.rgb, FragColor.a * alpha);
-    }
+    if (distance > 0) discard;
+    float alpha = smoothstep(0.0, softness, distance);
+
+    out_color = vec4(rect_color.rgb, alpha);
 }
+
+// void main() {
+//     // Convert fragment coords into top-left origin system
+//     vec2 fragCoord = vec2(gl_FragCoord.x, window_size.y - gl_FragCoord.y);
+//
+//     // Rectangle center in window space
+//     vec2 rect_center = bottom_left + rect_size * 0.5;
+//
+//     // Local fragment position relative to rect center
+//     vec2 p = fragCoord - rect_center;
+//
+//     // Half size of rectangle
+//     vec2 half_size = rect_size * 0.5;
+//
+//     // Signed distance to rounded box
+//     float dist = sdRoundedBox(p, half_size, corner_radius);
+//
+//     // Smooth alpha based on distance
+//     float aa = fwidth(dist);
+//     float alpha = smoothstep(0.0, aa, -dist);
+//
+//     out_color = vec4(rect_color.rgb, rect_color.a * alpha);
+// }
