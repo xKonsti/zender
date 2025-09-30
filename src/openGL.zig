@@ -73,11 +73,11 @@ const Vertex = struct {
     border_width: f32,
     border_color: [4]f32,
 
-    fn fromRect(x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]f32) Vertex {
+    fn fromRect(x: f32, y: f32, w: f32, h: f32, r: f32, rect_center: [2]f32, color: [4]f32) Vertex {
         return Vertex{
             .pos = .{ x, y },
             .color = color,
-            .rect_center = .{ x + w / 2, y + h / 2 },
+            .rect_center = rect_center,
             .rect_size = .{ w, h },
             .corner_radius = r,
             .border_width = 0,
@@ -207,19 +207,23 @@ pub const Renderer2D = struct {
 
         const base: c_uint = @intCast(self.vertexCount);
 
+        const center_x = tl_x + width_scaled / 2;
+        const center_y = tl_y + height_scaled / 2;
+        const r_scaled = r * @max(scale_x, scale_y);
+
         // 4 vertices
-        self.vertexData[self.vertexCount + 0] = .fromRect(tl_x, tl_y, width_scaled, height_scaled, r, color);
-        self.vertexData[self.vertexCount + 1] = .fromRect(br_x, tl_y, width_scaled, height_scaled, r, color);
-        self.vertexData[self.vertexCount + 2] = .fromRect(br_x, br_y, width_scaled, height_scaled, r, color);
-        self.vertexData[self.vertexCount + 3] = .fromRect(tl_x, br_y, width_scaled, height_scaled, r, color);
+        self.vertexData[self.vertexCount + 0] = .fromRect(tl_x, tl_y, width_scaled, height_scaled, r_scaled, .{ center_x, center_y }, color);
+        self.vertexData[self.vertexCount + 1] = .fromRect(br_x, tl_y, width_scaled, height_scaled, r_scaled, .{ center_x, center_y }, color);
+        self.vertexData[self.vertexCount + 2] = .fromRect(br_x, br_y, width_scaled, height_scaled, r_scaled, .{ center_x, center_y }, color);
+        self.vertexData[self.vertexCount + 3] = .fromRect(tl_x, br_y, width_scaled, height_scaled, r_scaled, .{ center_x, center_y }, color);
 
         // 6 indices
-        self.indexData[self.indexCount + 0] = base + 0;
-        self.indexData[self.indexCount + 1] = base + 1;
-        self.indexData[self.indexCount + 2] = base + 2;
-        self.indexData[self.indexCount + 3] = base + 0;
-        self.indexData[self.indexCount + 4] = base + 2;
-        self.indexData[self.indexCount + 5] = base + 3;
+        self.indexData[self.indexCount + 0] = base + 0; // tl
+        self.indexData[self.indexCount + 1] = base + 2; // br
+        self.indexData[self.indexCount + 2] = base + 1; // tr
+        self.indexData[self.indexCount + 3] = base + 0; // tl
+        self.indexData[self.indexCount + 4] = base + 3; // bl
+        self.indexData[self.indexCount + 5] = base + 2; // br
 
         self.vertexCount += 4;
         self.indexCount += 6;

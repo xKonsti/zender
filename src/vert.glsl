@@ -8,7 +8,6 @@ layout(location = 4) in float aCornerRadius; // Corner radius
 layout(location = 5) in float aBorderWidth;  // Border width
 layout(location = 6) in vec4 aBorderColor;   // Border color
 
-out vec2 rect_pos;
 flat out vec2 rect_center;
 flat out vec2 rect_size;
 flat out vec4 rect_color;
@@ -17,8 +16,7 @@ flat out float corner_radius;
 uniform vec2 window_size;                    // Window size for coordinate transformation
 
 void main() {
-    rect_pos = aPos;
-    rect_center = aRectCenter;
+    rect_center = vec2(aRectCenter.x, window_size.y - aRectCenter.y);
     rect_size = aRectSize;
     rect_color = aColor;
     corner_radius = aCornerRadius;

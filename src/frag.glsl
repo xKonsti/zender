@@ -1,6 +1,5 @@
 #version 410 core
 
-in vec2 rect_pos;
 flat in vec2 rect_center;
 flat in vec2 rect_size;
 flat in vec4 rect_color;
@@ -19,38 +18,12 @@ float RoundedRectSDF(vec2 sample_pos, vec2 rect_center, vec2 rect_half_size, flo
 }
 
 void main() {
-    float softness = 1.0;
-    float distance = RoundedRectSDF(rect_pos, rect_center, rect_size / 2, corner_radius);
-    // if (corner_radius == 120) discard;
-    // if (distance > 0.0) 
-    //     discard;
-    // if (corner_radius == 0) discard;
-    
-    if (distance > 0) discard;
-    float alpha = smoothstep(0.0, softness, distance);
+    vec2 half_size = rect_size / 2;
+    float radius = min(corner_radius, min(half_size.x, half_size.y));
+    float distance = RoundedRectSDF(gl_FragCoord.xy, rect_center, half_size, radius);
 
-    out_color = vec4(rect_color.rgb, alpha);
+    float softness = fwidth(distance); // smooth anti-aliasing
+    float alpha = 1.0 - smoothstep(0.0, softness, distance);
+
+    out_color = vec4(rect_color.rgb, rect_color.a * alpha);
 }
-
-// void main() {
-//     // Convert fragment coords into top-left origin system
-//     vec2 fragCoord = vec2(gl_FragCoord.x, window_size.y - gl_FragCoord.y);
-//
-//     // Rectangle center in window space
-//     vec2 rect_center = bottom_left + rect_size * 0.5;
-//
-//     // Local fragment position relative to rect center
-//     vec2 p = fragCoord - rect_center;
-//
-//     // Half size of rectangle
-//     vec2 half_size = rect_size * 0.5;
-//
-//     // Signed distance to rounded box
-//     float dist = sdRoundedBox(p, half_size, corner_radius);
-//
-//     // Smooth alpha based on distance
-//     float aa = fwidth(dist);
-//     float alpha = smoothstep(0.0, aa, -dist);
-//
-//     out_color = vec4(rect_color.rgb, rect_color.a * alpha);
-// }

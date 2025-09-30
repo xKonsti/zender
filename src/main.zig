@@ -18,7 +18,7 @@ pub fn main() !void {
 
     glfw.defaultWindowHints();
 
-    var window = try glfw.Window.init(640, 480, "2D UI Renderer", null, null);
+    var window = try glfw.Window.init(1200, 800, "2D UI Renderer", null, null);
     defer window.deinit();
 
     glfw.makeContextCurrent(window.handle);
@@ -58,13 +58,13 @@ pub fn main() !void {
         const scale = window.getContentScale();
 
         renderer.begin(scale[0], scale[1]);
-        // renderer.drawRect(0, 0, 200, 50, .{ 1.0, 0.5, 0.0, 1.0 });
-        // renderer.drawRect(0, 0, 100, 100, .{ 0.0, 0.0, 1.0, 1.0 });
-        // renderer.drawRect(100, 100, 200, 50, .{ 1.0, 0.5, 0.0, 1.0 });
-        // renderer.drawRect(350, 100, 100, 100, .{ 0.2, 0.8, 0.3, 1.0 });
+        renderer.drawRect(0, 0, 200, 50, .{ 1.0, 0.5, 0.0, 1.0 });
+        renderer.drawRect(0, 0, 100, 100, .{ 0.0, 0.0, 1.0, 1.0 });
+        renderer.drawRect(100, 100, 200, 50, .{ 1.0, 0.5, 0.0, 1.0 });
+        renderer.drawRect(350, 100, 100, 100, .{ 0.2, 0.8, 0.3, 1.0 });
 
-        renderer.drawRoundedRect(100, 100, 400, 300, 120, .{ 1.0, 0.0, 0.0, 1.0 });
-        // renderer.drawRoundedRect(0, 0, 100, 100, 10, .{ 1.0, 0.0, 0.0, 1.0 });
+        renderer.drawRoundedRect(100, 300, 400, 300, 1200, .{ 1.0, 0.0, 0.0, 1.0 });
+        renderer.drawRoundedRect(1000, 0, 100, 100, 10, .{ 1.0, 0.0, 0.0, 1.0 });
         renderer.end();
 
         // Swap buffers & poll events
