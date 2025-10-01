@@ -19,7 +19,7 @@ float RoundedRectSDF(vec2 sample_pos, vec2 rect_center, vec2 rect_half_size, flo
 
 void main() {
     vec2 half_size = rect_size / 2;
-    float radius = min(corner_radius, min(half_size.x, half_size.y));
+    float radius = min(corner_radius, min(half_size.x, half_size.y)); // corner_radius can be less than half_size not more
     float distance = RoundedRectSDF(gl_FragCoord.xy, rect_center, half_size, radius);
 
     float softness = fwidth(distance); // smooth anti-aliasing

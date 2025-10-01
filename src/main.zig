@@ -3,6 +3,7 @@ const std = @import("std");
 const glfw = @import("glfw.zig");
 const glWrapper = @import("openGL.zig");
 const gl = glWrapper.gl;
+const font = @import("font.zig");
 
 // Youâ€™ll import or declare OpenGL function pointers somewhere, e.g.:
 var procs: gl.ProcTable = undefined;
@@ -18,7 +19,7 @@ pub fn main() !void {
 
     glfw.defaultWindowHints();
 
-    var window = try glfw.Window.init(1200, 800, "2D UI Renderer", null, null);
+    var window = try glfw.Window.init(1200, 1000, "2D UI Renderer", null, null);
     defer window.deinit();
 
     glfw.makeContextCurrent(window.handle);
@@ -51,6 +52,11 @@ pub fn main() !void {
         // Clear screen
         gl.ClearColor(0.2, 0.3, 0.3, 1.0);
         gl.Clear(gl.COLOR_BUFFER_BIT);
+
+        // const allocator = std.heap.page_allocator;
+        var f: font.ft.FT_Library = undefined;
+        _ = font.ft.FT_Init_FreeType(&f);
+        _ = font.hb.hb_buffer_create();
 
         program.use();
         const dims = window.bufferSize();
