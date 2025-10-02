@@ -53,23 +53,25 @@ pub fn main() !void {
         gl.ClearColor(0.2, 0.3, 0.3, 1.0);
         gl.Clear(gl.COLOR_BUFFER_BIT);
 
-        // const allocator = std.heap.page_allocator;
-        var f: font.ft.FT_Library = undefined;
-        _ = font.ft.FT_Init_FreeType(&f);
-        _ = font.hb.hb_buffer_create();
+        const allocator = std.heap.page_allocator;
+        var f = try font.createFontFromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 48);
+        defer f.deinit();
+
+        // draw a complex german text showing off unicode
+        const n = std.time.microTimestamp();
+        const glyphs = try f.shapeText("Hällö 😀 Wörld!");
+        _ = glyphs;
+        std.debug.print("Shape took {d}ms\n", .{std.time.microTimestamp() - n});
 
         program.use();
-        const dims = window.bufferSize();
-        gl.Uniform2f(program.window_size_loc, @floatFromInt(dims[0]), @floatFromInt(dims[1]));
-        const scale = window.getContentScale();
 
-        renderer.begin(scale[0], scale[1]);
+        renderer.begin(window.bufferSize(), window.getContentScale());
         renderer.drawRect(0, 0, 200, 50, .{ 1.0, 0.5, 0.0, 1.0 });
-        renderer.drawRect(0, 0, 100, 100, .{ 0.0, 0.0, 1.0, 1.0 });
+        renderer.drawRect(0, 0, 100, 100, .{ 0.0, 0.0, 1.0, 0.2 });
         renderer.drawRect(100, 100, 200, 50, .{ 1.0, 0.5, 0.0, 1.0 });
         renderer.drawRect(350, 100, 100, 100, .{ 0.2, 0.8, 0.3, 1.0 });
 
-        renderer.drawRoundedRect(100, 300, 400, 300, 1200, .{ 1.0, 0.0, 0.0, 1.0 });
+        renderer.drawRoundedRect(100, 300, 400, 300, 1200, .{ 0.8, 0.2, 0.2, 1.0 });
         renderer.drawRoundedRect(1000, 0, 100, 100, 10, .{ 1.0, 0.0, 0.0, 1.0 });
         renderer.end();
 
