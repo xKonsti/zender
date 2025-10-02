@@ -1,7 +1,7 @@
 #version 410 core
 
 layout(location = 0) in vec2 base_pos;              // Base quad vertex [-0.5, 0.5]
-layout(location = 1) in vec2 inst_tl;              // Instance top-left (unscaled)
+layout(location = 1) in vec2 inst_pos;              // Instance top-left (unscaled)
 layout(location = 2) in vec2 inst_size;             // Instance size (unscaled)
 layout(location = 3) in vec4 inst_color;            // Instance color
 layout(location = 4) in float inst_corner_radius;   // Instance corner radius
@@ -19,28 +19,28 @@ flat out vec4 border_color;
 flat out int v_use_texture;
 out vec2 v_uv;
 
-uniform vec4 window_params;
+uniform vec4 window_params; // vec2 size, vec2 scale
 
 void main() {
-    vec2 buffer_size = window_params.xy; // already scaled so no need to multiply
+    vec2 window_size = window_params.xy;
     vec2 window_scale = window_params.zw;
-    
-    vec2 inst_size_scaled = inst_size * window_scale;
-    vec2 inst_tl_scaled = inst_tl * window_scale; // Top-left in window coords
-    vec2 base_pos_scaled = (inst_tl + (base_pos + 0.5) * inst_size) * window_scale;
 
-    // Convert to NDC: (0,0) -> (-1,1), (buffer_size.x, buffer_size.y) -> (1,-1)
-    vec2 ndc = (base_pos_scaled / buffer_size) * 2.0 - 1.0;
+    // Scale base_pos by inst_size and translate by inst_pos
+    vec2 scaled_size = inst_size * window_scale;
+    vec2 scaled_pos = (inst_pos + base_pos * inst_size) * window_scale;
+
+    // Convert to NDC: (0,0) top-left -> (-1,1), (width,height) bottom-right -> (1,-1)
+    vec2 ndc = (scaled_pos / window_size) * 2.0 - 1.0;
     ndc.y = -ndc.y; // Flip y for top-left origin
     gl_Position = vec4(ndc, 0.0, 1.0);
 
-    rect_center = inst_tl_scaled + inst_size_scaled / 2; // Center in window coords
-    rect_center.y = window_params.y - rect_center.y;
-    rect_size = inst_size_scaled;
+    // Pass to fragment (unscaled for SDF, in world coords)
+    rect_center = inst_pos + inst_size * 0.5; // Center in unscaled coords
+    rect_size = inst_size;
     rect_color = inst_color;
-    corner_radius = min(inst_corner_radius * min(window_scale.x, window_scale.y), min(inst_size_scaled.x, inst_size_scaled.y));
-    border_width = inst_border_width * min(window_scale.x, window_scale.y);
+    corner_radius = inst_corner_radius;
+    border_width = inst_border_width;
     border_color = inst_border_color;
-    v_use_texture = use_texture; // 0 = solid, 1 = textured
-    v_uv = uv_offset;
+    v_use_texture = use_texture;
+    v_uv = base_pos + 0.5 + uv_offset; // Map [-0.5,0.5] to [0,1] UV + offset
 }

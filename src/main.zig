@@ -59,20 +59,21 @@ pub fn main() !void {
 
         // draw a complex german text showing off unicode
         const n = std.time.microTimestamp();
-        const glyphs = try f.shapeText("Hällö 😀 Wörld!");
-        _ = glyphs;
-        std.debug.print("Shape took {d}ms\n", .{std.time.microTimestamp() - n});
+        // const glyphs = try f.shapeText("Hällö 😀 Wörld!");
+        // _ = glyphs;
+        std.debug.print("Shaping text took {d}µs\n", .{std.time.microTimestamp() - n});
 
         program.use();
 
         renderer.begin(window.bufferSize(), window.getContentScale());
-        renderer.drawRect(0, 0, 200, 50, .{ 1.0, 0.5, 0.0, 1.0 });
+        renderer.drawRect(5, 5, 200, 50, .{ 1.0, 0.5, 0.0, 1.0 });
         renderer.drawRect(0, 0, 100, 100, .{ 0.0, 0.0, 1.0, 0.2 });
         renderer.drawRect(100, 100, 200, 50, .{ 1.0, 0.5, 0.0, 1.0 });
-        renderer.drawRect(350, 100, 100, 100, .{ 0.2, 0.8, 0.3, 1.0 });
+        renderer.drawRoundedBorderRect(350, 100, 100, 100, 0, .{ 0.2, 0.8, 0.3, 1.0 }, 8, .{ 0.0, 0.0, 0.0, 1.0 });
 
-        renderer.drawRoundedRect(100, 300, 400, 300, 1200, .{ 0.8, 0.2, 0.2, 1.0 });
-        renderer.drawRoundedRect(1000, 0, 100, 100, 10, .{ 1.0, 0.0, 0.0, 1.0 });
+        renderer.drawRoundedBorderRect(200, 300, 400, 300, 120, .{ 0.8, 0.2, 0.2, 1.0 }, 4, .{ 0, 0, 0, 1 });
+        renderer.drawRoundedRect(1000, 0, 100, 100, 12, .{ 1.0, 0.0, 0.0, 1.0 });
+        renderer.drawRoundedBorderRect(800, 400, 140, 100, 12, .{ 1.0, 1.0, 0.0, 0.8 }, 2, .{ 0.0, 0.0, 0.0, 1.0 });
         renderer.end();
 
         // Swap buffers & poll events

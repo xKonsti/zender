@@ -5,7 +5,8 @@ pub const gl = @import("gl");
 pub const Program = struct {
     id: c_uint,
 
-    window_size_loc: c_int,
+    window_params_loc: c_int,
+    tex_loc: c_int,
 
     pub fn init(comptime vertex_shader_src: []const u8, comptime fragment_shader_src: []const u8) !Program {
         const program_id = gl.CreateProgram();
@@ -31,7 +32,8 @@ pub const Program = struct {
 
         return .{
             .id = program_id,
-            .window_size_loc = gl.GetUniformLocation(program_id, "window_size"),
+            .window_params_loc = gl.GetUniformLocation(program_id, "window_params"),
+            .tex_loc = gl.GetUniformLocation(program_id, "tex"),
         };
     }
 
@@ -49,7 +51,7 @@ pub const Program = struct {
 
     fn compileShader(kind: c_uint, comptime src: []const u8) !c_uint {
         const shader = gl.CreateShader(kind);
-        gl.ShaderSource(shader, 1, &.{src.ptr}, null);
+        gl.ShaderSource(shader, 1, &.{src.ptr}, &.{src.len});
         gl.CompileShader(shader);
 
         var success: c_int = undefined;
@@ -65,178 +67,210 @@ pub const Program = struct {
 };
 
 const InstanceData = struct {
-    pos: [2]f32, // unscaled x,y
+    pos_tl: [2]f32, // unscaled x,y
     size: [2]f32, // unscaled width,height
     color: [4]f32,
     corner_radius: f32, // unscaled
     border_width: f32, // unscaled
     border_color: [4]f32,
+    use_texture: c_int, // 0 = solid, 1 = textured
+    uv_offset: [2]f32, // for text/images, UV offset in atlas
 
-    fn fromRect(x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]f32) InstanceData {
+    fn fromRect(x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]f32, border_width: f32, border_color: [4]f32) InstanceData {
         return InstanceData{
-            .pos = .{ x, y },
+            .pos_tl = .{ x, y },
+            .size = .{ w, h },
             .color = color,
-            .rect_size = .{ w, h },
             .corner_radius = r,
-            .border_width = 0,
-            .border_color = .{ 0, 0, 0, 0 },
+            .border_width = border_width,
+            .border_color = border_color,
+            .use_texture = 0,
+            .uv_offset = .{ 0, 0 },
         };
     }
 
     comptime {
-        assert(@offsetOf(InstanceData, "pos") == 0);
-        assert(@offsetOf(InstanceData, "color") == 2 * @sizeOf(f32));
-        assert(@offsetOf(InstanceData, "rect_center") == (2 + 4) * @sizeOf(f32));
-        assert(@offsetOf(InstanceData, "rect_size") == (2 + 4 + 2) * @sizeOf(f32));
-        assert(@offsetOf(InstanceData, "corner_radius") == (2 + 4 + 2 + 2) * @sizeOf(f32));
-        assert(@offsetOf(InstanceData, "border_width") == (2 + 4 + 2 + 2 + 1) * @sizeOf(f32));
-        assert(@offsetOf(InstanceData, "border_color") == (2 + 4 + 2 + 2 + 1 + 1) * @sizeOf(f32));
+        assert(@offsetOf(InstanceData, "pos_tl") == 0);
+        assert(@offsetOf(InstanceData, "size") == 2 * @sizeOf(f32));
+        assert(@offsetOf(InstanceData, "color") == (2 + 2) * @sizeOf(f32));
+        assert(@offsetOf(InstanceData, "corner_radius") == (2 + 2 + 4) * @sizeOf(f32));
+        assert(@offsetOf(InstanceData, "border_width") == (2 + 2 + 4 + 1) * @sizeOf(f32));
+        assert(@offsetOf(InstanceData, "border_color") == (2 + 2 + 4 + 1 + 1) * @sizeOf(f32));
+        assert(@offsetOf(InstanceData, "use_texture") == (2 + 2 + 4 + 1 + 1 + 4) * @sizeOf(f32));
+        assert(@offsetOf(InstanceData, "uv_offset") == (2 + 2 + 4 + 1 + 1 + 4 + 1) * @sizeOf(f32));
     }
 };
 
 pub const MAX_RECTANGLES = 10_000;
-pub const MAX_VERTICES = MAX_RECTANGLES * 4;
-pub const MAX_INDICES = MAX_RECTANGLES * 6;
 
 pub const Renderer2D = struct {
     program: Program,
-
+    base_vbo: c_uint,
+    base_ebo: c_uint,
     vao: c_uint,
     vbo: c_uint,
-    ebo: c_uint,
-
-    window_scale_x: f32,
-    window_scale_y: f32,
-
-    vertexData: [MAX_VERTICES]InstanceData,
-    indexData: [MAX_INDICES]c_uint,
-    vertexCount: usize,
-    indexCount: usize,
+    instance_data: [MAX_RECTANGLES]InstanceData,
+    rect_count: usize,
+    current_texture: c_uint,
+    white_texture: c_uint,
+    atlas_texture: c_uint,
 
     pub fn init(program: Program) !Renderer2D {
         var vao: c_uint = undefined;
         gl.GenVertexArrays(1, (&vao)[0..1]);
-        gl.BindVertexArray(vao);
+        gl.BindVertexArray(vao); // Bind VAO first
 
+        // Base quad vertices (normalized)
+        const base_verts = [_][2]f32{ .{ -0.5, -0.5 }, .{ 0.5, -0.5 }, .{ 0.5, 0.5 }, .{ -0.5, 0.5 } };
+        var base_vbo: c_uint = undefined;
+        gl.GenBuffers(1, (&base_vbo)[0..1]);
+        gl.BindBuffer(gl.ARRAY_BUFFER, base_vbo);
+        gl.BufferData(gl.ARRAY_BUFFER, base_verts.len * @sizeOf([2]f32), &base_verts[0], gl.STATIC_DRAW);
+
+        // Indices: Counter-clockwise
+        const base_indices = [_]c_uint{ 0, 1, 2, 0, 2, 3 };
+        var base_ebo: c_uint = undefined;
+        gl.GenBuffers(1, (&base_ebo)[0..1]);
+        gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, base_ebo);
+        gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, base_indices.len * @sizeOf(c_uint), &base_indices[0], gl.STATIC_DRAW);
+
+        // Base vertex attribute
+        gl.VertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, 2 * @sizeOf(f32), 0);
+        gl.EnableVertexAttribArray(0);
+
+        // Instance VBO (dynamic)
         var vbo: c_uint = undefined;
         gl.GenBuffers(1, (&vbo)[0..1]);
         gl.BindBuffer(gl.ARRAY_BUFFER, vbo);
-        gl.BufferData(gl.ARRAY_BUFFER, MAX_VERTICES * @sizeOf(InstanceData), null, gl.DYNAMIC_DRAW);
+        gl.BufferData(gl.ARRAY_BUFFER, MAX_RECTANGLES * @sizeOf(InstanceData), null, gl.DYNAMIC_DRAW);
 
-        var ibo: c_uint = undefined;
-        gl.GenBuffers(1, (&ibo)[0..1]);
-        gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
-        gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, MAX_INDICES * @sizeOf(c_uint), null, gl.DYNAMIC_DRAW);
-
+        // Instance attributes
         const stride: c_uint = @sizeOf(InstanceData);
-
-        gl.VertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "pos"));
-        gl.EnableVertexAttribArray(0);
-
-        gl.VertexAttribPointer(1, 4, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "color"));
+        gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "pos_tl"));
+        gl.VertexAttribDivisor(1, 1);
         gl.EnableVertexAttribArray(1);
 
-        gl.VertexAttribPointer(2, 2, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "rect_center"));
+        gl.VertexAttribPointer(2, 2, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "size"));
+        gl.VertexAttribDivisor(2, 1);
         gl.EnableVertexAttribArray(2);
 
-        gl.VertexAttribPointer(3, 2, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "rect_size"));
+        gl.VertexAttribPointer(3, 4, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "color"));
+        gl.VertexAttribDivisor(3, 1);
         gl.EnableVertexAttribArray(3);
 
         gl.VertexAttribPointer(4, 1, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "corner_radius"));
+        gl.VertexAttribDivisor(4, 1);
         gl.EnableVertexAttribArray(4);
 
         gl.VertexAttribPointer(5, 1, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "border_width"));
+        gl.VertexAttribDivisor(5, 1);
         gl.EnableVertexAttribArray(5);
 
         gl.VertexAttribPointer(6, 4, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "border_color"));
+        gl.VertexAttribDivisor(6, 1);
         gl.EnableVertexAttribArray(6);
+
+        gl.VertexAttribIPointer(7, 1, gl.INT, stride, @offsetOf(InstanceData, "use_texture"));
+        gl.VertexAttribDivisor(7, 1);
+        gl.EnableVertexAttribArray(7);
+
+        gl.VertexAttribPointer(8, 2, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "uv_offset"));
+        gl.VertexAttribDivisor(8, 1);
+        gl.EnableVertexAttribArray(8);
+
+        // Unbind VAO
+        gl.BindVertexArray(0);
 
         gl.Enable(gl.BLEND);
         gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-        return Renderer2D{
+        // Create white texture
+        var white_texture: c_uint = undefined;
+        gl.GenTextures(1, (&white_texture)[0..1]);
+        gl.BindTexture(gl.TEXTURE_2D, white_texture);
+        const white_pixel = [4]u8{ 255, 255, 255, 255 };
+        gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, &white_pixel);
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+        // Placeholder atlas texture
+        var atlas_texture: c_uint = undefined;
+        gl.GenTextures(1, (&atlas_texture)[0..1]);
+
+        // Check for OpenGL errors
+        if (gl.GetError() != gl.NO_ERROR) {
+            std.log.err("OpenGL error during Renderer2D.init: {d}", .{gl.GetError()});
+            return error.OpenGLError;
+        }
+
+        return .{
             .program = program,
+            .base_vbo = base_vbo,
+            .base_ebo = base_ebo,
             .vao = vao,
             .vbo = vbo,
-            .ebo = ibo,
-            .vertexData = undefined,
-            .indexData = undefined,
-            .vertexCount = 0,
-            .indexCount = 0,
-            .window_scale_x = 1,
-            .window_scale_y = 1,
+            .instance_data = undefined,
+            .rect_count = 0,
+            .current_texture = white_texture,
+            .white_texture = white_texture,
+            .atlas_texture = atlas_texture,
         };
     }
 
     pub fn deinit(self: *Renderer2D) void {
         gl.DeleteVertexArrays(1, (&self.vao)[0..1]);
         gl.DeleteBuffers(1, (&self.vbo)[0..1]);
-        gl.DeleteBuffers(1, (&self.ebo)[0..1]);
+        gl.DeleteBuffers(1, (&self.base_vbo)[0..1]);
+        gl.DeleteBuffers(1, (&self.base_ebo)[0..1]);
+        gl.DeleteTextures(1, (&self.white_texture)[0..1]);
+        gl.DeleteTextures(1, (&self.atlas_texture)[0..1]);
     }
 
     pub fn begin(self: *Renderer2D, window_size: [2]u32, window_scale: [2]f32) void {
-        gl.Uniform2f(self.program.window_size_loc, @floatFromInt(window_size[0]), @floatFromInt(window_size[1]));
-        self.vertexCount = 0;
-        self.indexCount = 0;
-        self.window_scale_x = window_scale[0];
-        self.window_scale_y = window_scale[1];
+        self.rect_count = 0;
+        gl.BindVertexArray(self.vao);
+        gl.UseProgram(self.program.id);
+        gl.Uniform4f(self.program.window_params_loc, @floatFromInt(window_size[0]), @floatFromInt(window_size[1]), window_scale[0], window_scale[1]);
+        gl.Uniform1i(self.program.tex_loc, 0);
+        gl.ActiveTexture(gl.TEXTURE0);
+        gl.BindTexture(gl.TEXTURE_2D, self.white_texture);
+        self.current_texture = self.white_texture;
+
+        if (gl.GetError() != gl.NO_ERROR) {
+            std.log.err("OpenGL error during Renderer2D.begin: {d}", .{gl.GetError()});
+        }
+    }
+
+    fn flush(self: *Renderer2D) void {
+        if (self.rect_count == 0) return;
+        std.log.debug("Flushing {d} rectangles", .{self.rect_count});
+        gl.BindVertexArray(self.vao);
+        gl.BindBuffer(gl.ARRAY_BUFFER, self.vbo);
+        gl.BufferSubData(gl.ARRAY_BUFFER, 0, @intCast(self.rect_count * @sizeOf(InstanceData)), &self.instance_data[0]);
+        gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, self.base_ebo);
+        gl.DrawElementsInstanced(gl.TRIANGLES, 6, gl.UNSIGNED_INT, 0, @intCast(self.rect_count));
+        self.rect_count = 0;
+
+        if (gl.GetError() != gl.NO_ERROR) {
+            std.log.err("OpenGL error during Renderer2D.flush: {d}", .{gl.GetError()});
+        }
     }
 
     pub inline fn drawRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, color: [4]f32) void {
-        drawRoundedRect(self, x, y, w, h, 0.0, color);
+        drawRoundedBorderRect(self, x, y, w, h, 0.0, color, 0, color);
     }
 
     pub fn drawRoundedRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]f32) void {
-        if (self.vertexCount + 4 > MAX_VERTICES or self.indexCount + 6 > MAX_INDICES) {
-            std.log.err("Vertex buffer or index buffer overflow", .{});
-            std.debug.print("Vertex count: {d}, Index count: {d}\n", .{ self.vertexCount, self.indexCount });
-            return;
-        }
+        drawRoundedBorderRect(self, x, y, w, h, r, color, 0, color);
+    }
 
-        const scale_x: f32 = self.window_scale_x;
-        const scale_y: f32 = self.window_scale_y;
-
-        const tl_x = x * scale_x;
-        const tl_y = y * scale_y;
-        const br_x = (x + w) * scale_x;
-        const br_y = (y + h) * scale_y;
-
-        const width_scaled = w * scale_x;
-        const height_scaled = h * scale_y;
-
-        const base: c_uint = @intCast(self.vertexCount);
-
-        const center_x = tl_x + width_scaled / 2;
-        const center_y = tl_y + height_scaled / 2;
-        const r_scaled = r * @max(scale_x, scale_y);
-
-        // 4 vertices
-        self.vertexData[self.vertexCount + 0] = .fromRect(tl_x, tl_y, width_scaled, height_scaled, r_scaled, .{ center_x, center_y }, color);
-        self.vertexData[self.vertexCount + 1] = .fromRect(br_x, tl_y, width_scaled, height_scaled, r_scaled, .{ center_x, center_y }, color);
-        self.vertexData[self.vertexCount + 2] = .fromRect(br_x, br_y, width_scaled, height_scaled, r_scaled, .{ center_x, center_y }, color);
-        self.vertexData[self.vertexCount + 3] = .fromRect(tl_x, br_y, width_scaled, height_scaled, r_scaled, .{ center_x, center_y }, color);
-
-        // 6 indices
-        self.indexData[self.indexCount + 0] = base + 0;
-        self.indexData[self.indexCount + 1] = base + 1;
-        self.indexData[self.indexCount + 2] = base + 2;
-        self.indexData[self.indexCount + 3] = base + 0;
-        self.indexData[self.indexCount + 4] = base + 2;
-        self.indexData[self.indexCount + 5] = base + 3;
-
-        self.vertexCount += 4;
-        self.indexCount += 6;
+    pub fn drawRoundedBorderRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]f32, border_width: f32, border_color: [4]f32) void {
+        if (self.rect_count >= MAX_RECTANGLES) self.flush();
+        self.instance_data[self.rect_count] = .fromRect(x, y, w, h, r, color, border_width, border_color);
+        self.rect_count += 1;
     }
 
     pub fn end(self: *Renderer2D) void {
-        gl.BindVertexArray(self.vao);
-
-        gl.BindBuffer(gl.ARRAY_BUFFER, self.vbo);
-        gl.BufferSubData(gl.ARRAY_BUFFER, 0, @intCast(@sizeOf(InstanceData) * self.vertexCount), &self.vertexData[0]);
-
-        gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, self.ebo);
-        gl.BufferSubData(gl.ELEMENT_ARRAY_BUFFER, 0, @intCast(@sizeOf(c_uint) * self.indexCount), &self.indexData[0]);
-
-        gl.DrawElements(gl.TRIANGLES, @intCast(self.indexCount), gl.UNSIGNED_INT, 0);
+        self.flush();
     }
 };
