@@ -13,6 +13,8 @@ fn errorCallback(errn: c_int, str: [*c]const u8) callconv(std.builtin.CallingCon
 }
 
 pub fn main() !void {
+    const alloc = std.heap.page_allocator;
+
     _ = glfw.setErrorCallback(errorCallback);
     try glfw.init();
     defer glfw.deinit();
@@ -32,14 +34,14 @@ pub fn main() !void {
     gl.makeProcTableCurrent(&procs);
     defer gl.makeProcTableCurrent(null);
 
+    try font.init(alloc);
+    defer font.deinit();
+
     const program = try glWrapper.Program.init(@embedFile("vert.glsl"), @embedFile("frag.glsl"));
     defer program.deinit();
 
     // const uProjectionLoc = program.uniformLocation("uProjection");
-    var renderer = glWrapper.Renderer2D.init(program) catch |err| {
-        std.debug.print("Error in init Renderer2D: {t}\n", .{err});
-        return;
-    };
+    var renderer = try glWrapper.Renderer2D.init(program);
 
     // Main loop
     while (!window.shouldClose()) {
@@ -52,16 +54,6 @@ pub fn main() !void {
         // Clear screen
         gl.ClearColor(0.2, 0.3, 0.3, 1.0);
         gl.Clear(gl.COLOR_BUFFER_BIT);
-
-        const allocator = std.heap.page_allocator;
-        var f = try font.createFontFromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 48);
-        defer f.deinit();
-
-        // draw a complex german text showing off unicode
-        const n = std.time.microTimestamp();
-        // const glyphs = try f.shapeText("Hällö 😀 Wörld!");
-        // _ = glyphs;
-        std.debug.print("Shaping text took {d}µs\n", .{std.time.microTimestamp() - n});
 
         program.use();
 
