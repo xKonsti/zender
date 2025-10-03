@@ -8,7 +8,7 @@ layout(location = 4) in float inst_corner_radius;   // Instance corner radius
 layout(location = 5) in float inst_border_width;    // Instance border width
 layout(location = 6) in vec4 inst_border_color;     // Instance border color
 layout(location = 7) in int use_texture;            // 0 = solid, 1 = textured
-layout(location = 8) in vec2 uv_offset;             // UV offset for atlas
+layout(location = 8) in vec4 uv_data;               // UV data for atlas (x, y, width, height)
 
 flat out vec2 rect_center;
 flat out vec2 rect_size;
@@ -42,5 +42,6 @@ void main() {
     border_width = inst_border_width * min(window_scale.x, window_scale.y);
     border_color = inst_border_color;
     v_use_texture = use_texture; // 0 = solid, 1 = textured
-    v_uv = uv_offset;
+    vec2 quad_uv = base_pos + 0.5; // 0..1
+    v_uv = quad_uv * uv_data.zw + uv_data.xy;
 }

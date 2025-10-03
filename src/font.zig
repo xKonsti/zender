@@ -48,7 +48,7 @@ pub fn init(allocator: std.mem.Allocator) !void {
 
     // geist_semibold_16 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 16);
     // geist_semibold_24 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 24);
-    // geist_semibold_32 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 32);
+    // geist_semibold_32 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-emiBold.ttf"), 32);
     geist_semibold_48 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 48);
     // geist_semibold_64 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 64);
     // geist_semibold_72 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 72);
@@ -134,6 +134,7 @@ pub const Font = struct {
     harfb_font: *harfb.hb_font_t,
     pixel_height: f32,
     atlas: FontAtlas,
+    units_per_em: u16,
 
     pub fn fromMemory(allocator: Allocator, comptime font_data: []const u8, pixel_height: f32) !Font {
         const now = std.time.milliTimestamp();
@@ -170,6 +171,7 @@ pub const Font = struct {
             .harfb_font = harfb_font,
             .pixel_height = pixel_height,
             .atlas = undefined,
+            .units_per_em = face.*.units_per_EM,
         };
         const atlas = try FontAtlas.init(allocator, font);
         font.atlas = atlas;
@@ -262,7 +264,7 @@ const Rect = struct {
     h: u32,
 };
 
-const FontAtlas = struct {
+pub const FontAtlas = struct {
     alloc: Allocator,
     pixel: []u8,
     width: u32,
@@ -270,6 +272,9 @@ const FontAtlas = struct {
     glyphs_map: std.AutoHashMap(u32, Rect), // maps to uv texture coordinates (x, y, width, height)
 
     pub fn init(alloc: Allocator, font: Font) !FontAtlas {
+        assert(font.pixel_height <= 512); // TODO: maybe lift that restriction?
+
+        const MAX_ROW_WIDTH = 2048;
         const num_glyphs: usize = @intCast(font.ft_face.*.num_glyphs);
 
         var glyphs_map = std.AutoHashMap(u32, Rect).init(alloc);
@@ -285,57 +290,65 @@ const FontAtlas = struct {
 
         // Step 1: Collect glyphs and estimate size
         var total_width: u32 = 0;
-        var max_height: u32 = 0;
+        var total_height: u32 = 0;
+        var current_max_height: u32 = 0;
+        var current_width: u32 = 0;
         for (0..num_glyphs) |i| {
-            // const now = std.time.microTimestamp();
             var glyph = try font.rasterizeGlyph(i);
-            // std.debug.print("rasterizing glyph took {d}µs\n", .{std.time.microTimestamp() - now});
-            if (glyph.width > 0 and glyph.height > 0) {
-                glyphs_map.putAssumeCapacityNoClobber(@intCast(i), .{
-                    .x = total_width,
-                    .y = 0,
-                    .w = @intCast(glyph.width),
-                    .h = @intCast(glyph.height),
-                });
-                glyphs.appendAssumeCapacity(glyph);
-
-                total_width += @intCast(glyph.width);
-                max_height = @max(max_height, @as(u32, @intCast(glyph.height)));
-            } else {
+            if (glyph.width == 0 or glyph.height == 0) {
                 glyph.deinit();
+                continue;
             }
-        }
-        std.debug.print("total width: {d}, max height: {d}\n", .{ total_width, max_height });
 
-        var pixel = try alloc.alloc(u8, total_width * max_height);
+            if (current_width + @as(u32, @intCast(glyph.width)) > MAX_ROW_WIDTH) {
+                total_width = @max(total_width, current_width);
+                total_height += current_max_height;
+                current_width = 0;
+                current_max_height = 0;
+            }
+
+            glyphs_map.putAssumeCapacityNoClobber(@intCast(i), .{
+                .x = current_width,
+                .y = total_height,
+                .w = @intCast(glyph.width),
+                .h = @intCast(glyph.height),
+            });
+            glyphs.appendAssumeCapacity(glyph);
+
+            current_width += @intCast(glyph.width);
+            current_max_height = @max(current_max_height, @as(u32, @intCast(glyph.height)));
+        }
+        total_width = @max(total_width, current_width);
+        total_height += current_max_height;
+        std.debug.print("total width: {d}, max height: {d}\n", .{ total_width, total_height });
+
+        var pixel = try alloc.alloc(u8, total_width * total_height);
         errdefer alloc.free(pixel);
 
-        var x_offset: u32 = 0;
-        for (glyphs.items) |g| {
+        @memset(pixel, 0);
+
+        for (glyphs.items, 0..) |g, i| {
             const gw: usize = @intCast(g.width);
             const gh: usize = @intCast(g.height);
             const pitch: usize = @intCast(g.pitch);
 
-            // Copy row by row into atlas
+            const rect = glyphs_map.get(@intCast(i)) orelse continue;
             for (0..gh) |row| {
                 const src_start = row * pitch;
                 const src = g.pixels[src_start .. src_start + gw];
 
-                const dst_start = row * total_width + x_offset;
+                const dst_start = (rect.y + row) * total_width + rect.x;
                 const dst = pixel[dst_start .. dst_start + gw];
-
                 @memcpy(dst, src);
             }
-
-            x_offset += @intCast(g.width);
         }
 
-        // try writeToBMP(alloc, max_height, glyphs.items);
+        try writeToBMP(alloc, total_height, glyphs.items);
 
         return .{
             .alloc = alloc,
             .width = total_width,
-            .height = max_height,
+            .height = total_height,
             .pixel = pixel,
             .glyphs_map = glyphs_map,
         };

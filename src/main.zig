@@ -66,6 +66,8 @@ pub fn main() !void {
         renderer.drawRoundedBorderRect(200, 300, 400, 300, 120, .{ 0.8, 0.2, 0.2, 1.0 }, 4, .{ 0, 0, 0, 1 });
         renderer.drawRoundedRect(1000, 0, 100, 100, 12, .{ 1.0, 0.0, 0.0, 1.0 });
         renderer.drawRoundedBorderRect(800, 400, 140, 100, 12, .{ 1.0, 1.0, 0.0, 0.8 }, 2, .{ 0.0, 0.0, 0.0, 1.0 });
+
+        try renderer.drawText(font.geist_regular_48, "Hellö, world!", 100, 100, 96, .{ 1.0, 1.0, 1.0, 1.0 });
         renderer.end();
 
         // Swap buffers & poll events

@@ -26,7 +26,11 @@ void main() {
     // Solid or textured color
     vec4 color = rect_color;
     if (v_use_texture == 1) {
-        color = texture(tex, v_uv) * rect_color; // Multiply by tint
+        float mask = texture(tex, v_uv).r;
+        // color.rgb *= mask;
+        color.a *= mask;
+        // color = vec4(1,0,0,1);
+        // color = texture(tex, v_uv) * rect_color; // Multiply by tint
     }
 
     // INFO: DEBUG SDF

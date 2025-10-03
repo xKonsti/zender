@@ -1,6 +1,8 @@
 const std = @import("std");
 const assert = std.debug.assert;
 pub const gl = @import("gl");
+const Font = @import("font.zig").Font;
+const FontAtlas = @import("font.zig").FontAtlas;
 
 pub const Program = struct {
     id: c_uint,
@@ -74,7 +76,7 @@ const InstanceData = struct {
     border_width: f32, // unscaled
     border_color: [4]f32,
     use_texture: c_int, // 0 = solid, 1 = textured
-    uv_offset: [2]f32, // for text/images, UV offset in atlas
+    uv_data: [4]f32, // for text/images, UV data (x, y, width, height)
 
     fn fromRect(x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]f32, border_width: f32, border_color: [4]f32) InstanceData {
         return InstanceData{
@@ -85,7 +87,7 @@ const InstanceData = struct {
             .border_width = border_width,
             .border_color = border_color,
             .use_texture = 0,
-            .uv_offset = .{ 0, 0 },
+            .uv_data = .{ 0, 0, 0, 0 },
         };
     }
 
@@ -97,7 +99,7 @@ const InstanceData = struct {
         assert(@offsetOf(InstanceData, "border_width") == (2 + 2 + 4 + 1) * @sizeOf(f32));
         assert(@offsetOf(InstanceData, "border_color") == (2 + 2 + 4 + 1 + 1) * @sizeOf(f32));
         assert(@offsetOf(InstanceData, "use_texture") == (2 + 2 + 4 + 1 + 1 + 4) * @sizeOf(f32));
-        assert(@offsetOf(InstanceData, "uv_offset") == (2 + 2 + 4 + 1 + 1 + 4 + 1) * @sizeOf(f32));
+        assert(@offsetOf(InstanceData, "uv_data") == (2 + 2 + 4 + 1 + 1 + 4 + 1) * @sizeOf(f32));
     }
 };
 
@@ -174,7 +176,7 @@ pub const Renderer2D = struct {
         gl.VertexAttribDivisor(7, 1);
         gl.EnableVertexAttribArray(7);
 
-        gl.VertexAttribPointer(8, 2, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "uv_offset"));
+        gl.VertexAttribPointer(8, 4, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "uv_data"));
         gl.VertexAttribDivisor(8, 1);
         gl.EnableVertexAttribArray(8);
 
@@ -256,6 +258,47 @@ pub const Renderer2D = struct {
         }
     }
 
+    pub fn uploadAtlas(self: *Renderer2D, font_atlas: FontAtlas) void {
+        // Make sure we target texture unit 0 because that's what the shader expects via Uniform1i(...)
+        gl.ActiveTexture(gl.TEXTURE0);
+        gl.BindTexture(gl.TEXTURE_2D, self.atlas_texture);
+
+        // Pixel alignment for single-channel data
+        gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1);
+
+        // Upload: internal format RED, data format RED
+        gl.TexImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RED, // internal format
+            @intCast(font_atlas.width),
+            @intCast(font_atlas.height),
+            0,
+            gl.RED, // source/pixel format
+            gl.UNSIGNED_BYTE,
+            font_atlas.pixel.ptr,
+        );
+
+        // Set sampling / wrapping
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        // --- important: swizzle RED -> RGB, ALPHA -> 1
+        // This makes sampling texture(tex, uv) return (r,r,r,1) for compatibility
+        // on backends that do not auto-swizzle RED to vec4.
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_SWIZZLE_R, gl.RED);
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_SWIZZLE_G, gl.RED);
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_SWIZZLE_B, gl.RED);
+        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_SWIZZLE_A, gl.ONE);
+
+        const e = gl.GetError();
+        if (e != gl.NO_ERROR) {
+            std.log.err("OpenGL error after uploadAtlas: {d}", .{e});
+        }
+    }
+
     pub inline fn drawRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, color: [4]f32) void {
         drawRoundedBorderRect(self, x, y, w, h, 0.0, color, 0, color);
     }
@@ -268,6 +311,58 @@ pub const Renderer2D = struct {
         if (self.rect_count >= MAX_RECTANGLES) self.flush();
         self.instance_data[self.rect_count] = .fromRect(x, y, w, h, r, color, border_width, border_color);
         self.rect_count += 1;
+    }
+
+    pub fn drawText(self: *Renderer2D, font: Font, text: []const u8, x: f32, y: f32, size: f32, text_color: [4]f32) !void {
+        // Switch texture if needed
+        if (self.current_texture != self.atlas_texture) {
+            self.flush();
+            // gl.BindTexture(gl.TEXTURE_2D, self.atlas_texture);
+            std.debug.print("uploading atlas with width = {}\n", .{font.atlas.width});
+            self.uploadAtlas(font.atlas);
+            self.current_texture = self.atlas_texture;
+        }
+
+        // Shape text (using your font.zig HarfBuzz wrapper)
+        const glyphs = try font.shapeText(text);
+
+        var cursor_x: f32 = x;
+        var cursor_y: f32 = y;
+
+        for (glyphs) |g| {
+            const rect = font.atlas.glyphs_map.get(g.glyph_index) orelse continue;
+
+            // Scale glyph to requested text size
+            const scale = size / font.pixel_height;
+            const w = @as(f32, @floatFromInt(rect.w)) * scale;
+            const h = @as(f32, @floatFromInt(rect.h)) * scale;
+
+            const xpos = cursor_x + g.x_offset * scale;
+            const ypos = cursor_y - g.y_offset * scale;
+
+            // Instance setup
+            if (self.rect_count >= MAX_RECTANGLES) self.flush();
+            self.instance_data[self.rect_count] = .{
+                .pos_tl = .{ xpos, ypos },
+                .size = .{ w, h },
+                .color = text_color,
+                .corner_radius = 0,
+                .border_width = 0,
+                .border_color = .{ 0, 0, 0, 0 },
+                .use_texture = 1,
+                .uv_data = .{
+                    @as(f32, @floatFromInt(rect.x)) / @as(f32, @floatFromInt(font.atlas.width)),
+                    @as(f32, @floatFromInt(rect.y)) / @as(f32, @floatFromInt(font.atlas.height)),
+                    @as(f32, @floatFromInt(rect.w)) / @as(f32, @floatFromInt(font.atlas.width)),
+                    @as(f32, @floatFromInt(rect.h)) / @as(f32, @floatFromInt(font.atlas.height)),
+                },
+            };
+            self.rect_count += 1;
+
+            // Advance cursor
+            cursor_x += g.x_advance * scale;
+            cursor_y += g.y_advance * scale;
+        }
     }
 
     pub fn end(self: *Renderer2D) void {
