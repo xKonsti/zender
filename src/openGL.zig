@@ -325,20 +325,35 @@ pub const Renderer2D = struct {
 
         // Shape text (using your font.zig HarfBuzz wrapper)
         const glyphs = try font.shapeText(text);
+        defer font.deinitShapedText(glyphs);
 
         var cursor_x: f32 = x;
         var cursor_y: f32 = y;
 
+        // Scale glyph to requested text size
+        const scale = size / font.pixel_height;
+
         for (glyphs) |g| {
+            if (g.cluster < text.len and text[g.cluster] == '\n') {
+                cursor_x = x;
+                cursor_y += size;
+                continue;
+            }
+
             const rect = font.atlas.glyphs_map.get(g.glyph_index) orelse continue;
 
-            // Scale glyph to requested text size
-            const scale = size / font.pixel_height;
+            if (rect.w == 0 or rect.h == 0) {
+                cursor_x += g.x_advance * scale;
+                cursor_y += g.y_advance * scale;
+                continue;
+            }
+
             const w = @as(f32, @floatFromInt(rect.w)) * scale;
             const h = @as(f32, @floatFromInt(rect.h)) * scale;
 
-            const xpos = cursor_x + g.x_offset * scale;
-            const ypos = cursor_y - g.y_offset * scale;
+            // Baseline-correct placement
+            const xpos = cursor_x + @as(f32, @floatFromInt(rect.left)) * scale;
+            const ypos = cursor_y - @as(f32, @floatFromInt(rect.top)) * scale;
 
             // Instance setup
             if (self.rect_count >= MAX_RECTANGLES) self.flush();

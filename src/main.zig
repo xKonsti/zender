@@ -13,7 +13,9 @@ fn errorCallback(errn: c_int, str: [*c]const u8) callconv(std.builtin.CallingCon
 }
 
 pub fn main() !void {
-    const alloc = std.heap.page_allocator;
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer if (gpa.deinit() == .leak) std.log.err("Failed to deinit gpa", .{});
+    const alloc = gpa.allocator();
 
     _ = glfw.setErrorCallback(errorCallback);
     try glfw.init();
@@ -67,7 +69,13 @@ pub fn main() !void {
         renderer.drawRoundedRect(1000, 0, 100, 100, 12, .{ 1.0, 0.0, 0.0, 1.0 });
         renderer.drawRoundedBorderRect(800, 400, 140, 100, 12, .{ 1.0, 1.0, 0.0, 0.8 }, 2, .{ 0.0, 0.0, 0.0, 1.0 });
 
-        try renderer.drawText(font.geist_regular_48, "Hellö, world!", 100, 100, 96, .{ 1.0, 1.0, 1.0, 1.0 });
+        renderer.drawRect(95, 55, 800, 200, .{ 0.0, 0.0, 0.0, 1.0 });
+        try renderer.drawText(font.geist_regular_48,
+            \\Hällö, World!éáó
+            \\Lorem ipsum dolor sit.
+            \\Nullam euismod, nisl?
+            \\NULLAM EUISMOD, NISL?
+        , 100, 100, 32, .{ 1.0, 1.0, 1.0, 1.0 });
         renderer.end();
 
         // Swap buffers & poll events

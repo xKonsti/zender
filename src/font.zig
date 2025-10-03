@@ -22,49 +22,85 @@ pub fn init(allocator: std.mem.Allocator) !void {
         std.log.err("FreeType init failed: {d}", .{init_error});
     }
 
-    // geist_light_16 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Light.ttf"), 16);
-    // geist_light_24 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Light.ttf"), 24);
-    // geist_light_32 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Light.ttf"), 32);
+    geist_light_16 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Light.ttf"), 16);
+    geist_light_24 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Light.ttf"), 24);
+    geist_light_32 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Light.ttf"), 32);
     geist_light_48 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Light.ttf"), 48);
-    // geist_light_64 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Light.ttf"), 64);
-    // geist_light_72 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Light.ttf"), 72);
-    // geist_light_96 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Light.ttf"), 96);
+    geist_light_64 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Light.ttf"), 64);
+    geist_light_72 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Light.ttf"), 72);
+    geist_light_96 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Light.ttf"), 96);
 
-    // geist_regular_16 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 16);
-    // geist_regular_24 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 24);
-    // geist_regular_32 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 32);
-    geist_regular_48 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 48);
-    // geist_regular_64 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 64);
-    // geist_regular_72 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 72);
-    // geist_regular_96 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 96);
+    geist_regular_16 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 16);
+    geist_regular_24 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 24);
+    geist_regular_32 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 32);
+    geist_regular_48 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 48 * 2);
+    geist_regular_64 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 64);
+    geist_regular_72 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 72);
+    geist_regular_96 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 96);
 
-    // geist_medium_16 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Medium.ttf"), 16);
-    // geist_medium_24 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Medium.ttf"), 24);
-    // geist_medium_32 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Medium.ttf"), 32);
+    geist_medium_16 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Medium.ttf"), 16);
+    geist_medium_24 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Medium.ttf"), 24);
+    geist_medium_32 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Medium.ttf"), 32);
     geist_medium_48 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Medium.ttf"), 48);
-    // geist_medium_64 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Medium.ttf"), 64);
-    // geist_medium_72 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Medium.ttf"), 72);
-    // geist_medium_96 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Medium.ttf"), 96);
+    geist_medium_64 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Medium.ttf"), 64);
+    geist_medium_72 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Medium.ttf"), 72);
+    geist_medium_96 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Medium.ttf"), 96);
 
-    // geist_semibold_16 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 16);
-    // geist_semibold_24 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 24);
-    // geist_semibold_32 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-emiBold.ttf"), 32);
+    geist_semibold_16 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 16);
+    geist_semibold_24 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 24);
+    geist_semibold_32 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 32);
     geist_semibold_48 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 48);
-    // geist_semibold_64 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 64);
-    // geist_semibold_72 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 72);
-    // geist_semibold_96 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 96);
+    geist_semibold_64 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 64);
+    geist_semibold_72 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 72);
+    geist_semibold_96 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 96);
 
-    // geist_bold_16 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Bold.ttf"), 16);
-    // geist_bold_24 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Bold.ttf"), 24);
-    // geist_bold_32 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Bold.ttf"), 32);
+    geist_bold_16 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Bold.ttf"), 16);
+    geist_bold_24 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Bold.ttf"), 24);
+    geist_bold_32 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Bold.ttf"), 32);
     geist_bold_48 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Bold.ttf"), 48);
-    // geist_bold_64 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Bold.ttf"), 64);
-    // geist_bold_72 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Bold.ttf"), 72);
-    // geist_bold_96 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Bold.ttf"), 96);
+    geist_bold_64 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Bold.ttf"), 64);
+    geist_bold_72 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Bold.ttf"), 72);
+    geist_bold_96 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Bold.ttf"), 96);
 }
 
 pub fn deinit() void {
     _ = ft.FT_Done_FreeType(freetype_lib);
+
+    geist_light_16.deinit();
+    geist_light_24.deinit();
+    geist_light_32.deinit();
+    geist_light_48.deinit();
+    geist_light_64.deinit();
+    geist_light_72.deinit();
+    geist_light_96.deinit();
+    geist_regular_16.deinit();
+    geist_regular_24.deinit();
+    geist_regular_32.deinit();
+    geist_regular_48.deinit();
+    geist_regular_64.deinit();
+    geist_regular_72.deinit();
+    geist_regular_96.deinit();
+    geist_medium_16.deinit();
+    geist_medium_24.deinit();
+    geist_medium_32.deinit();
+    geist_medium_48.deinit();
+    geist_medium_64.deinit();
+    geist_medium_72.deinit();
+    geist_medium_96.deinit();
+    geist_semibold_16.deinit();
+    geist_semibold_24.deinit();
+    geist_semibold_32.deinit();
+    geist_semibold_48.deinit();
+    geist_semibold_64.deinit();
+    geist_semibold_72.deinit();
+    geist_semibold_96.deinit();
+    geist_bold_16.deinit();
+    geist_bold_24.deinit();
+    geist_bold_32.deinit();
+    geist_bold_48.deinit();
+    geist_bold_64.deinit();
+    geist_bold_72.deinit();
+    geist_bold_96.deinit();
 }
 
 pub var geist_light_16: Font = undefined;
@@ -126,6 +162,7 @@ pub const ShapedGlyph = struct {
     y_advance: f32,
     x_offset: f32,
     y_offset: f32,
+    cluster: u32,
 };
 
 pub const Font = struct {
@@ -214,6 +251,7 @@ pub const Font = struct {
                 .y_advance = @as(f32, @floatFromInt(pos.y_advance)) / 64.0,
                 .x_offset = @as(f32, @floatFromInt(pos.x_offset)) / 64.0,
                 .y_offset = @as(f32, @floatFromInt(pos.y_offset)) / 64.0,
+                .cluster = info.cluster,
             };
         }
         return shaped_glyphs;
@@ -258,10 +296,17 @@ pub const Font = struct {
 };
 
 const Rect = struct {
-    x: u32,
-    y: u32,
-    w: u32,
-    h: u32,
+    x: u32, // position in atlas (padded rect.x where bitmap starts)
+    y: u32, // position in atlas
+    w: u32, // bitmap width (not counting padding)
+    h: u32, // bitmap height
+    left: i32, // bitmap_left (FT bitmap_left) — horizontal bearing
+    top: i32, // bitmap_top  (FT bitmap_top)  — vertical bearing (distance from baseline to top)
+};
+
+const packGlyph = struct {
+    index: u32,
+    bmp: GlyphBitmap,
 };
 
 pub const FontAtlas = struct {
@@ -269,86 +314,125 @@ pub const FontAtlas = struct {
     pixel: []u8,
     width: u32,
     height: u32,
-    glyphs_map: std.AutoHashMap(u32, Rect), // maps to uv texture coordinates (x, y, width, height)
+    glyphs_map: std.AutoHashMap(u32, Rect),
 
     pub fn init(alloc: Allocator, font: Font) !FontAtlas {
-        assert(font.pixel_height <= 512); // TODO: maybe lift that restriction?
+        assert(font.pixel_height <= 512);
 
-        const MAX_ROW_WIDTH = 2048;
+        const MAX_ROW_WIDTH: u32 = 2048;
+        const PADDING: u32 = 2; // pixels of transparent padding around each glyph
         const num_glyphs: usize = @intCast(font.ft_face.*.num_glyphs);
 
         var glyphs_map = std.AutoHashMap(u32, Rect).init(alloc);
+        // Only deinit the map on error (we return it on success).
         errdefer glyphs_map.deinit();
 
         try glyphs_map.ensureTotalCapacity(@intCast(num_glyphs));
 
-        var glyphs = try std.ArrayList(GlyphBitmap).initCapacity(alloc, num_glyphs);
+        var pack = try std.ArrayList(packGlyph).initCapacity(alloc, num_glyphs);
         defer {
-            for (glyphs.items) |*g| g.deinit();
-            glyphs.deinit(alloc);
+            // free bitmaps and the list on both success and error; bitmaps are no longer needed after copying
+            for (pack.items) |*pg| pg.bmp.deinit();
+            pack.deinit(alloc);
         }
 
-        // Step 1: Collect glyphs and estimate size
-        var total_width: u32 = 0;
-        var total_height: u32 = 0;
-        var current_max_height: u32 = 0;
-        var current_width: u32 = 0;
-        for (0..num_glyphs) |i| {
-            var glyph = try font.rasterizeGlyph(i);
+        // Layout state
+        var atlas_w: u32 = 0;
+        var atlas_h: u32 = 0;
+        var cursor_x: u32 = 0;
+        var row_h: u32 = 0;
+
+        // Collect glyph bitmaps and assign slots (row packing)
+        for (0..num_glyphs) |gi| {
+            var glyph = try font.rasterizeGlyph(gi);
             if (glyph.width == 0 or glyph.height == 0) {
+                std.debug.print("Skipping empty glyph {d}\n", .{gi});
+                // Keep an entry so we know its bearings and advance, but no pixels
+                glyphs_map.putAssumeCapacityNoClobber(@intCast(gi), .{
+                    .x = 0,
+                    .y = 0,
+                    .w = 0,
+                    .h = 0,
+                    .left = glyph.left,
+                    .top = glyph.top,
+                });
                 glyph.deinit();
                 continue;
             }
 
-            if (current_width + @as(u32, @intCast(glyph.width)) > MAX_ROW_WIDTH) {
-                total_width = @max(total_width, current_width);
-                total_height += current_max_height;
-                current_width = 0;
-                current_max_height = 0;
+            const gw: u32 = @as(u32, @intCast(glyph.width));
+            const gh: u32 = @as(u32, @intCast(glyph.height));
+            const gw_padded: u32 = gw + (PADDING * 2);
+            const gh_padded: u32 = gh + (PADDING * 2);
+
+            // wrap to next row if needed
+            if (cursor_x + gw_padded > MAX_ROW_WIDTH) {
+                atlas_w = @max(atlas_w, cursor_x);
+                cursor_x = 0;
+                atlas_h += row_h;
+                row_h = 0;
             }
 
-            glyphs_map.putAssumeCapacityNoClobber(@intCast(i), .{
-                .x = current_width,
-                .y = total_height,
-                .w = @intCast(glyph.width),
-                .h = @intCast(glyph.height),
+            const rect_x = cursor_x + PADDING;
+            const rect_y = atlas_h + PADDING;
+
+            // store rect with bearings (left/top) so rendering code can place glyphs on baseline
+            glyphs_map.putAssumeCapacityNoClobber(@intCast(gi), .{
+                .x = rect_x,
+                .y = rect_y,
+                .w = gw,
+                .h = gh,
+                .left = glyph.left,
+                .top = glyph.top,
             });
-            glyphs.appendAssumeCapacity(glyph);
 
-            current_width += @intCast(glyph.width);
-            current_max_height = @max(current_max_height, @as(u32, @intCast(glyph.height)));
+            // keep the actual bitmap around so we can copy it into the atlas
+            pack.appendAssumeCapacity(.{
+                .index = @intCast(gi),
+                .bmp = glyph,
+            });
+
+            cursor_x += gw_padded;
+            row_h = @max(row_h, gh_padded);
         }
-        total_width = @max(total_width, current_width);
-        total_height += current_max_height;
-        std.debug.print("total width: {d}, max height: {d}\n", .{ total_width, total_height });
 
-        var pixel = try alloc.alloc(u8, total_width * total_height);
+        atlas_w = @max(atlas_w, cursor_x);
+        atlas_h += row_h;
+
+        if (atlas_w == 0 or atlas_h == 0) {
+            return error.AtlasTooSmall;
+        }
+
+        std.debug.print("Atlas size = {d}x{d}\n", .{ atlas_w, atlas_h });
+
+        // Allocate and clear pixel buffer
+        var pixel = try alloc.alloc(u8, @as(usize, atlas_w) * @as(usize, atlas_h));
+        // free on error
         errdefer alloc.free(pixel);
-
         @memset(pixel, 0);
 
-        for (glyphs.items, 0..) |g, i| {
-            const gw: usize = @intCast(g.width);
-            const gh: usize = @intCast(g.height);
-            const pitch: usize = @intCast(g.pitch);
+        // Copy each glyph bitmap into its reserved rect
+        for (pack.items) |pg| {
+            const gw: usize = @intCast(pg.bmp.width);
+            const gh: usize = @intCast(pg.bmp.height);
+            const pitch: usize = @intCast(pg.bmp.pitch);
 
-            const rect = glyphs_map.get(@intCast(i)) orelse continue;
-            for (0..gh) |row| {
-                const src_start = row * pitch;
-                const src = g.pixels[src_start .. src_start + gw];
-
-                const dst_start = (rect.y + row) * total_width + rect.x;
+            const rect = glyphs_map.get(pg.index) orelse continue;
+            for (0..gh) |r| {
+                const src_row = pg.bmp.pixels[(r * pitch)..(r * pitch + gw)];
+                const dst_row = @as(usize, rect.y) + r;
+                const dst_start = dst_row * @as(usize, atlas_w) + @as(usize, rect.x);
                 const dst = pixel[dst_start .. dst_start + gw];
-                @memcpy(dst, src);
+                @memcpy(dst, src_row);
             }
         }
 
-        try writeToBMP(alloc, total_height, glyphs.items);
+        try writeToBMP(alloc, atlas_w, atlas_h, pixel);
 
         return .{
             .alloc = alloc,
-            .width = total_width,
-            .height = total_height,
+            .width = atlas_w,
+            .height = atlas_h,
             .pixel = pixel,
             .glyphs_map = glyphs_map,
         };
@@ -362,7 +446,64 @@ pub const FontAtlas = struct {
         return self.glyphs_map.get(glyph_index).?;
     }
 
-    fn writeToBMP(alloc: Allocator, max_height: u32, glyphs: []GlyphBitmap) !void {
+    fn writeToBMP(alloc: Allocator, width: u32, height: u32, pixels: []u8) !void {
+        const row_stride: usize = ((@as(usize, width) * 3 + 3) / 4) * 4;
+        const file_size = 14 + 40 + row_stride * @as(usize, height);
+
+        const file = try std.fs.cwd().createFile("font_atlas.bmp", .{});
+        defer file.close();
+
+        // BMP file header (14 bytes)
+        const file_header = [_]u8{
+            'B',                                         'M',
+            @as(u8, @intCast(file_size & 0xFF)),         @as(u8, @intCast((file_size >> 8) & 0xFF)),
+            @as(u8, @intCast((file_size >> 16) & 0xFF)), @as(u8, @intCast((file_size >> 24) & 0xFF)),
+            0,                                           0,
+            0,                                           0,
+            54,                                          0,
+            0,                                           0,
+        };
+
+        // DIB header (40 bytes, BITMAPINFOHEADER)
+        const dib_header = [_]u8{
+            40,                               0,                                       0,                                        0,
+            @as(u8, @intCast(width & 0xFF)),  @as(u8, @intCast((width >> 8) & 0xFF)),  @as(u8, @intCast((width >> 16) & 0xFF)),  @as(u8, @intCast((width >> 24) & 0xFF)),
+            @as(u8, @intCast(height & 0xFF)), @as(u8, @intCast((height >> 8) & 0xFF)), @as(u8, @intCast((height >> 16) & 0xFF)), @as(u8, @intCast((height >> 24) & 0xFF)),
+            1,                                0,                                       24,                                       0,
+            0,                                0,                                       0,                                        0,
+            0,                                0,                                       0,                                        0,
+            0,                                0,                                       0,                                        0,
+            0,                                0,                                       0,                                        0,
+            0,                                0,                                       0,                                        0,
+            0,                                0,                                       0,                                        0,
+        };
+
+        try file.writeAll(&file_header);
+        try file.writeAll(&dib_header);
+
+        // --- FIXED ROW-WRITE WITH PADDING ---
+        var rgb_row = try alloc.alloc(u8, row_stride);
+        defer alloc.free(rgb_row);
+
+        for (0..height) |y| {
+            const src_y = height - 1 - y; // BMP wants bottom-to-top
+            var idx: usize = 0;
+            for (0..width) |x| {
+                const gray = pixels[src_y * width + x];
+                rgb_row[idx + 0] = gray; // B
+                rgb_row[idx + 1] = gray; // G
+                rgb_row[idx + 2] = gray; // R
+                idx += 3;
+            }
+            // pad to 4-byte boundary
+            while (idx < row_stride) : (idx += 1) {
+                rgb_row[idx] = 0;
+            }
+            try file.writeAll(rgb_row[0..row_stride]);
+        }
+    }
+
+    fn writeToBMP2(alloc: Allocator, max_height: u32, glyphs: []GlyphBitmap) !void {
         // Step 2: Use a square atlas with row-based packing
         const atlas_width: u32 = 1024 * 2; // Adjust as needed (power of 2 recommended)
         var atlas_height: u32 = max_height;
