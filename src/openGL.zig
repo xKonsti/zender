@@ -1,8 +1,12 @@
 const std = @import("std");
 const assert = std.debug.assert;
+
 pub const gl = @import("gl");
+
 const Font = @import("font.zig").Font;
 const FontAtlas = @import("font.zig").FontAtlas;
+const FontCollection = @import("font.zig").FontCollection;
+const FontStyle = @import("font.zig").FontStyle;
 
 pub const Program = struct {
     id: c_uint,
@@ -113,8 +117,8 @@ pub const Renderer2D = struct {
     vbo: c_uint,
     instance_data: [MAX_RECTANGLES]InstanceData,
     rect_count: usize,
-    current_texture: c_uint,
-    white_texture: c_uint,
+    current_font_id: ?u64,
+    current_texture_id: ?u32,
     atlas_texture: c_uint,
 
     pub fn init(program: Program) !Renderer2D {
@@ -186,15 +190,6 @@ pub const Renderer2D = struct {
         gl.Enable(gl.BLEND);
         gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-        // Create white texture
-        var white_texture: c_uint = undefined;
-        gl.GenTextures(1, (&white_texture)[0..1]);
-        gl.BindTexture(gl.TEXTURE_2D, white_texture);
-        const white_pixel = [4]u8{ 255, 255, 255, 255 };
-        gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, &white_pixel);
-        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-
         // Placeholder atlas texture
         var atlas_texture: c_uint = undefined;
         gl.GenTextures(1, (&atlas_texture)[0..1]);
@@ -213,8 +208,8 @@ pub const Renderer2D = struct {
             .vbo = vbo,
             .instance_data = undefined,
             .rect_count = 0,
-            .current_texture = white_texture,
-            .white_texture = white_texture,
+            .current_font_id = null,
+            .current_texture_id = null,
             .atlas_texture = atlas_texture,
         };
     }
@@ -224,7 +219,6 @@ pub const Renderer2D = struct {
         gl.DeleteBuffers(1, (&self.vbo)[0..1]);
         gl.DeleteBuffers(1, (&self.base_vbo)[0..1]);
         gl.DeleteBuffers(1, (&self.base_ebo)[0..1]);
-        gl.DeleteTextures(1, (&self.white_texture)[0..1]);
         gl.DeleteTextures(1, (&self.atlas_texture)[0..1]);
     }
 
@@ -235,8 +229,6 @@ pub const Renderer2D = struct {
         gl.Uniform4f(self.program.window_params_loc, @floatFromInt(window_size[0]), @floatFromInt(window_size[1]), window_scale[0], window_scale[1]);
         gl.Uniform1i(self.program.tex_loc, 0);
         gl.ActiveTexture(gl.TEXTURE0);
-        gl.BindTexture(gl.TEXTURE_2D, self.white_texture);
-        self.current_texture = self.white_texture;
 
         if (gl.GetError() != gl.NO_ERROR) {
             std.log.err("OpenGL error during Renderer2D.begin: {d}", .{gl.GetError()});
@@ -313,49 +305,77 @@ pub const Renderer2D = struct {
         self.rect_count += 1;
     }
 
-    pub fn drawText(self: *Renderer2D, font: Font, text: []const u8, x: f32, y: f32, size: f32, text_color: [4]f32) !void {
-        // Switch texture if needed
-        if (self.current_texture != self.atlas_texture) {
+    pub fn drawText(self: *Renderer2D, font_collection: FontCollection, text: []const u8, x: f32, y: f32, size: f32, style: FontStyle, text_color: [4]f32) !void {
+        const font = font_collection.getFont(size, style);
+        if (self.current_texture_id == null or self.current_font_id == null or self.current_font_id.? != font.id) {
             self.flush();
-            // gl.BindTexture(gl.TEXTURE_2D, self.atlas_texture);
-            std.debug.print("uploading atlas with width = {}\n", .{font.atlas.width});
             self.uploadAtlas(font.atlas);
-            self.current_texture = self.atlas_texture;
+            self.current_texture_id = self.atlas_texture;
+            self.current_font_id = font.id;
         }
 
-        // Shape text (using your font.zig HarfBuzz wrapper)
         const glyphs = try font.shapeText(text);
         defer font.deinitShapedText(glyphs);
 
-        var cursor_x: f32 = x;
-        var cursor_y: f32 = y;
-
-        // Scale glyph to requested text size
+        // scale between the atlas rasterization size (font.pixel_height) and requested size
         const scale = size / font.pixel_height;
 
+        // Get ascender/height from FreeType for proper baseline and line advances
+        // FreeType metrics are 26.6 fixed-point integers, so divide by 64.0 to get pixels
+        const ascender_px = @as(f32, @floatFromInt(font.ft_face.*.size.*.metrics.ascender)) / 64.0;
+        const line_advance_px = @as(f32, @floatFromInt(font.ft_face.*.size.*.metrics.height)) / 64.0;
+
+        // We want `x,y` to be top-left of the text block -> convert to baseline
+        var cursor_x: f32 = x;
+        var cursor_y: f32 = y + ascender_px * scale; // baseline = top + ascender (scaled)
+
         for (glyphs) |g| {
+            // Map back to input bytes using HarfBuzz cluster (you have cluster field)
             if (g.cluster < text.len and text[g.cluster] == '\n') {
                 cursor_x = x;
-                cursor_y += size;
+                cursor_y += line_advance_px * scale;
                 continue;
             }
 
-            const rect = font.atlas.glyphs_map.get(g.glyph_index) orelse continue;
+            // If the glyph is missing (.notdef) many fonts use index 0
+            if (g.glyph_index == 0) {
+                // Just advance the pen — don't draw a tofu box
+                cursor_x += g.x_advance * scale;
+                cursor_y += g.y_advance * scale;
+                continue;
+            }
 
+            const rect_opt = font.atlas.glyphs_map.get(g.glyph_index);
+            if (rect_opt == null) {
+                // No atlas entry (shouldn't happen for most printable glyphs) -> advance
+                cursor_x += g.x_advance * scale;
+                cursor_y += g.y_advance * scale;
+                continue;
+            }
+            const rect = rect_opt.?;
+
+            // If glyph has no bitmap (e.g. space), just advance
             if (rect.w == 0 or rect.h == 0) {
                 cursor_x += g.x_advance * scale;
                 cursor_y += g.y_advance * scale;
                 continue;
             }
 
+            // Compute size in screen pixels
             const w = @as(f32, @floatFromInt(rect.w)) * scale;
             const h = @as(f32, @floatFromInt(rect.h)) * scale;
 
-            // Baseline-correct placement
-            const xpos = cursor_x + @as(f32, @floatFromInt(rect.left)) * scale;
-            const ypos = cursor_y - @as(f32, @floatFromInt(rect.top)) * scale;
+            // Baseline-correct placement with HarfBuzz offsets:
+            //  - rect.left is bitmap_left (px from pen to left of bitmap)
+            //  - rect.top  is bitmap_top  (px from baseline up to top of bitmap)
+            // HarfBuzz x_offset/y_offset are applied on top of the pen position (scale them)
+            const hb_xoff = g.x_offset * scale;
+            const hb_yoff = g.y_offset * scale;
 
-            // Instance setup
+            const xpos = cursor_x + hb_xoff + @as(f32, @floatFromInt(rect.left)) * scale;
+            const ypos = cursor_y - @as(f32, @floatFromInt(rect.top)) * scale - hb_yoff;
+
+            // Queue instance
             if (self.rect_count >= MAX_RECTANGLES) self.flush();
             self.instance_data[self.rect_count] = .{
                 .pos_tl = .{ xpos, ypos },
@@ -374,7 +394,7 @@ pub const Renderer2D = struct {
             };
             self.rect_count += 1;
 
-            // Advance cursor
+            // advance pen by HarfBuzz advance (already in pixels), scaled
             cursor_x += g.x_advance * scale;
             cursor_y += g.y_advance * scale;
         }

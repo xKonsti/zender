@@ -69,13 +69,13 @@ pub fn main() !void {
         renderer.drawRoundedRect(1000, 0, 100, 100, 12, .{ 1.0, 0.0, 0.0, 1.0 });
         renderer.drawRoundedBorderRect(800, 400, 140, 100, 12, .{ 1.0, 1.0, 0.0, 0.8 }, 2, .{ 0.0, 0.0, 0.0, 1.0 });
 
-        renderer.drawRect(95, 55, 800, 200, .{ 0.0, 0.0, 0.0, 1.0 });
-        try renderer.drawText(font.geist_regular_48,
+        renderer.drawRect(95, 55, 800, 800, .{ 0.0, 0.0, 0.0, 1.0 });
+        try renderer.drawText(font.font_collection_geist,
             \\Hällö, World!éáó
             \\Lorem ipsum dolor sit.
             \\Nullam euismod, nisl?
             \\NULLAM EUISMOD, NISL?
-        , 100, 100, 32, .{ 1.0, 1.0, 1.0, 1.0 });
+        , 100, 60, 60, .regular, .{ 1.0, 1.0, 1.0, 1.0 });
         renderer.end();
 
         // Swap buffers & poll events

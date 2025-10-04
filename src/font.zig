@@ -16,129 +16,31 @@ const harfb = @cImport({
 
 var freetype_lib: ft.FT_Library = undefined;
 
+fn loadFontFromMem(allocator: std.mem.Allocator, comptime font_data: []const u8, pixel_height: f32, dst: *Font) void {
+    // the times two is because of highdpi rendering
+    // TODO: on normal screens without highdpi this seems to also be fine but look at it in greater detail
+    dst.* = Font.fromMemory(allocator, font_data, pixel_height * 2) catch |err| {
+        std.log.err("Font load failed: {s}", .{@errorName(err)});
+        unreachable;
+    };
+}
+
+pub var font_collection_geist: FontCollection = undefined;
+
 pub fn init(allocator: std.mem.Allocator) !void {
     const init_error = ft.FT_Init_FreeType(&freetype_lib);
     if (init_error != ft.FT_Err_Ok) {
         std.log.err("FreeType init failed: {d}", .{init_error});
     }
 
-    geist_light_16 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Light.ttf"), 16);
-    geist_light_24 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Light.ttf"), 24);
-    geist_light_32 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Light.ttf"), 32);
-    geist_light_48 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Light.ttf"), 48);
-    geist_light_64 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Light.ttf"), 64);
-    geist_light_72 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Light.ttf"), 72);
-    geist_light_96 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Light.ttf"), 96);
-
-    geist_regular_16 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 16);
-    geist_regular_24 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 24);
-    geist_regular_32 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 32);
-    geist_regular_48 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 48 * 2);
-    geist_regular_64 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 64);
-    geist_regular_72 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 72);
-    geist_regular_96 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Regular.ttf"), 96);
-
-    geist_medium_16 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Medium.ttf"), 16);
-    geist_medium_24 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Medium.ttf"), 24);
-    geist_medium_32 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Medium.ttf"), 32);
-    geist_medium_48 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Medium.ttf"), 48);
-    geist_medium_64 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Medium.ttf"), 64);
-    geist_medium_72 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Medium.ttf"), 72);
-    geist_medium_96 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Medium.ttf"), 96);
-
-    geist_semibold_16 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 16);
-    geist_semibold_24 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 24);
-    geist_semibold_32 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 32);
-    geist_semibold_48 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 48);
-    geist_semibold_64 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 64);
-    geist_semibold_72 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 72);
-    geist_semibold_96 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"), 96);
-
-    geist_bold_16 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Bold.ttf"), 16);
-    geist_bold_24 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Bold.ttf"), 24);
-    geist_bold_32 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Bold.ttf"), 32);
-    geist_bold_48 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Bold.ttf"), 48);
-    geist_bold_64 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Bold.ttf"), 64);
-    geist_bold_72 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Bold.ttf"), 72);
-    geist_bold_96 = try .fromMemory(allocator, @embedFile("resources/Font/Geist/Geist-Bold.ttf"), 96);
+    font_collection_geist = try .loadGeist(allocator);
 }
 
 pub fn deinit() void {
     _ = ft.FT_Done_FreeType(freetype_lib);
 
-    geist_light_16.deinit();
-    geist_light_24.deinit();
-    geist_light_32.deinit();
-    geist_light_48.deinit();
-    geist_light_64.deinit();
-    geist_light_72.deinit();
-    geist_light_96.deinit();
-    geist_regular_16.deinit();
-    geist_regular_24.deinit();
-    geist_regular_32.deinit();
-    geist_regular_48.deinit();
-    geist_regular_64.deinit();
-    geist_regular_72.deinit();
-    geist_regular_96.deinit();
-    geist_medium_16.deinit();
-    geist_medium_24.deinit();
-    geist_medium_32.deinit();
-    geist_medium_48.deinit();
-    geist_medium_64.deinit();
-    geist_medium_72.deinit();
-    geist_medium_96.deinit();
-    geist_semibold_16.deinit();
-    geist_semibold_24.deinit();
-    geist_semibold_32.deinit();
-    geist_semibold_48.deinit();
-    geist_semibold_64.deinit();
-    geist_semibold_72.deinit();
-    geist_semibold_96.deinit();
-    geist_bold_16.deinit();
-    geist_bold_24.deinit();
-    geist_bold_32.deinit();
-    geist_bold_48.deinit();
-    geist_bold_64.deinit();
-    geist_bold_72.deinit();
-    geist_bold_96.deinit();
+    font_collection_geist.deinit();
 }
-
-pub var geist_light_16: Font = undefined;
-pub var geist_light_24: Font = undefined;
-pub var geist_light_32: Font = undefined;
-pub var geist_light_48: Font = undefined;
-pub var geist_light_64: Font = undefined;
-pub var geist_light_72: Font = undefined;
-pub var geist_light_96: Font = undefined;
-pub var geist_regular_16: Font = undefined;
-pub var geist_regular_24: Font = undefined;
-pub var geist_regular_32: Font = undefined;
-pub var geist_regular_48: Font = undefined;
-pub var geist_regular_64: Font = undefined;
-pub var geist_regular_72: Font = undefined;
-pub var geist_regular_96: Font = undefined;
-pub var geist_medium_16: Font = undefined;
-pub var geist_medium_24: Font = undefined;
-pub var geist_medium_32: Font = undefined;
-pub var geist_medium_48: Font = undefined;
-pub var geist_medium_64: Font = undefined;
-pub var geist_medium_72: Font = undefined;
-pub var geist_medium_96: Font = undefined;
-pub var geist_semibold_16: Font = undefined;
-pub var geist_semibold_24: Font = undefined;
-pub var geist_semibold_32: Font = undefined;
-pub var geist_semibold_48: Font = undefined;
-pub var geist_semibold_64: Font = undefined;
-pub var geist_semibold_72: Font = undefined;
-pub var geist_semibold_96: Font = undefined;
-pub var geist_bold_16: Font = undefined;
-pub var geist_bold_24: Font = undefined;
-pub var geist_bold_32: Font = undefined;
-pub var geist_bold_48: Font = undefined;
-pub var geist_bold_64: Font = undefined;
-pub var geist_bold_72: Font = undefined;
-pub var geist_bold_96: Font = undefined;
-
 /// Represents a rendered glyph bitmap (8-bit grayscale).
 /// must be freed with `deinit`.
 pub const GlyphBitmap = struct {
@@ -162,10 +64,12 @@ pub const ShapedGlyph = struct {
     y_advance: f32,
     x_offset: f32,
     y_offset: f32,
+    /// maps to byte index in the original text
     cluster: u32,
 };
 
 pub const Font = struct {
+    id: u64,
     alloc: Allocator,
     ft_face: ft.FT_Face,
     harfb_font: *harfb.hb_font_t,
@@ -176,6 +80,10 @@ pub const Font = struct {
     pub fn fromMemory(allocator: Allocator, comptime font_data: []const u8, pixel_height: f32) !Font {
         const now = std.time.milliTimestamp();
         defer std.debug.print("Font init took {d}ms\n", .{std.time.milliTimestamp() - now});
+
+        var hasher = std.hash.Wyhash.init(0);
+        hasher.update(std.mem.asBytes(&pixel_height));
+        hasher.update(font_data);
 
         var font: Font = undefined;
         var face: ft.FT_Face = undefined;
@@ -203,6 +111,7 @@ pub const Font = struct {
 
         // TODO: this block below is really cringe
         font = .{
+            .id = hasher.final(),
             .alloc = allocator,
             .ft_face = face,
             .harfb_font = harfb_font,
@@ -600,5 +509,383 @@ pub const FontAtlas = struct {
             }
         }
         try file.writeAll(rgb_pixels);
+    }
+};
+
+pub const FontStyle = enum {
+    light,
+    regular,
+    medium,
+    semibold,
+    bold,
+    extrabold,
+    black,
+};
+
+pub const FontCollection = struct {
+    font_light_16: Font,
+    font_light_24: Font,
+    font_light_32: Font,
+    font_light_48: Font,
+    font_light_64: Font,
+    font_light_72: Font,
+    font_light_96: Font,
+    font_regular_16: Font,
+    font_regular_24: Font,
+    font_regular_32: Font,
+    font_regular_48: Font,
+    font_regular_64: Font,
+    font_regular_72: Font,
+    font_regular_96: Font,
+    font_medium_16: Font,
+    font_medium_24: Font,
+    font_medium_32: Font,
+    font_medium_48: Font,
+    font_medium_64: Font,
+    font_medium_72: Font,
+    font_medium_96: Font,
+    font_semibold_16: Font,
+    font_semibold_24: Font,
+    font_semibold_32: Font,
+    font_semibold_48: Font,
+    font_semibold_64: Font,
+    font_semibold_72: Font,
+    font_semibold_96: Font,
+    font_bold_16: Font,
+    font_bold_24: Font,
+    font_bold_32: Font,
+    font_bold_48: Font,
+    font_bold_64: Font,
+    font_bold_72: Font,
+    font_bold_96: Font,
+    font_extrabold_16: Font,
+    font_extrabold_24: Font,
+    font_extrabold_32: Font,
+    font_extrabold_48: Font,
+    font_extrabold_64: Font,
+    font_extrabold_72: Font,
+    font_extrabold_96: Font,
+    font_black_16: Font,
+    font_black_24: Font,
+    font_black_32: Font,
+    font_black_48: Font,
+    font_black_64: Font,
+    font_black_72: Font,
+    font_black_96: Font,
+
+    pub fn getFont(self: FontCollection, font_size: f32, style: FontStyle) Font {
+        const nearest_font_size = nearestFontSize(@intFromFloat(font_size));
+        return switch (style) {
+            .light => return switch (nearest_font_size) {
+                16 => self.font_light_16,
+                24 => self.font_light_24,
+                32 => self.font_light_32,
+                48 => self.font_light_48,
+                64 => self.font_light_64,
+                72 => self.font_light_72,
+                96 => self.font_light_96,
+                else => unreachable,
+            },
+            .regular => switch (nearest_font_size) {
+                16 => self.font_regular_16,
+                24 => self.font_regular_24,
+                32 => self.font_regular_32,
+                48 => self.font_regular_48,
+                64 => self.font_regular_64,
+                72 => self.font_regular_72,
+                96 => self.font_regular_96,
+                else => unreachable,
+            },
+            .medium => switch (nearest_font_size) {
+                16 => self.font_medium_16,
+                24 => self.font_medium_24,
+                32 => self.font_medium_32,
+                48 => self.font_medium_48,
+                64 => self.font_medium_64,
+                72 => self.font_medium_72,
+                96 => self.font_medium_96,
+                else => unreachable,
+            },
+            .semibold => switch (nearest_font_size) {
+                16 => self.font_semibold_16,
+                24 => self.font_semibold_24,
+                32 => self.font_semibold_32,
+                48 => self.font_semibold_48,
+                64 => self.font_semibold_64,
+                72 => self.font_semibold_72,
+                96 => self.font_semibold_96,
+                else => unreachable,
+            },
+            .bold => switch (nearest_font_size) {
+                16 => self.font_bold_16,
+                24 => self.font_bold_24,
+                32 => self.font_bold_32,
+                48 => self.font_bold_48,
+                64 => self.font_bold_64,
+                72 => self.font_bold_72,
+                96 => self.font_bold_96,
+                else => unreachable,
+            },
+            .extrabold => switch (nearest_font_size) {
+                16 => self.font_extrabold_16,
+                24 => self.font_extrabold_24,
+                32 => self.font_extrabold_32,
+                48 => self.font_extrabold_48,
+                64 => self.font_extrabold_64,
+                72 => self.font_extrabold_72,
+                96 => self.font_extrabold_96,
+                else => unreachable,
+            },
+            .black => switch (nearest_font_size) {
+                16 => self.font_black_16,
+                24 => self.font_black_24,
+                32 => self.font_black_32,
+                48 => self.font_black_48,
+                64 => self.font_black_64,
+                72 => self.font_black_72,
+                96 => self.font_black_96,
+                else => unreachable,
+            },
+        };
+    }
+
+    fn nearestFontSize(font_size: u16) u16 {
+        switch (font_size) {
+            0...16 => return 16,
+            17...24 => return 24,
+            25...32 => return 32,
+            33...48 => return 48,
+            49...64 => return 64,
+            65...72 => return 72,
+            73...96 => return 96,
+            else => return 96,
+        }
+    }
+
+    pub fn deinit(self: *FontCollection) void {
+        self.font_light_16.deinit();
+        self.font_light_24.deinit();
+        self.font_light_32.deinit();
+        self.font_light_48.deinit();
+        self.font_light_64.deinit();
+        self.font_light_72.deinit();
+        self.font_light_96.deinit();
+        self.font_regular_16.deinit();
+        self.font_regular_24.deinit();
+        self.font_regular_32.deinit();
+        self.font_regular_48.deinit();
+        self.font_regular_64.deinit();
+        self.font_regular_72.deinit();
+        self.font_regular_96.deinit();
+        self.font_medium_16.deinit();
+        self.font_medium_24.deinit();
+        self.font_medium_32.deinit();
+        self.font_medium_48.deinit();
+        self.font_medium_64.deinit();
+        self.font_medium_72.deinit();
+        self.font_medium_96.deinit();
+        self.font_semibold_16.deinit();
+        self.font_semibold_24.deinit();
+        self.font_semibold_32.deinit();
+        self.font_semibold_48.deinit();
+        self.font_semibold_64.deinit();
+        self.font_semibold_72.deinit();
+        self.font_semibold_96.deinit();
+        self.font_bold_16.deinit();
+        self.font_bold_24.deinit();
+        self.font_bold_32.deinit();
+        self.font_bold_48.deinit();
+        self.font_bold_64.deinit();
+        self.font_bold_72.deinit();
+        self.font_bold_96.deinit();
+        self.font_extrabold_16.deinit();
+        self.font_extrabold_24.deinit();
+        self.font_extrabold_32.deinit();
+        self.font_extrabold_48.deinit();
+        self.font_extrabold_64.deinit();
+        self.font_extrabold_72.deinit();
+        self.font_extrabold_96.deinit();
+        self.font_black_16.deinit();
+        self.font_black_24.deinit();
+        self.font_black_32.deinit();
+        self.font_black_48.deinit();
+        self.font_black_64.deinit();
+        self.font_black_72.deinit();
+        self.font_black_96.deinit();
+    }
+
+    fn loadGeist(allocator: std.mem.Allocator) !FontCollection {
+        var thread_pool: std.Thread.Pool = undefined;
+        try std.Thread.Pool.init(&thread_pool, .{
+            .allocator = allocator,
+        });
+
+        var font_light_16: Font = undefined;
+        var font_light_24: Font = undefined;
+        var font_light_32: Font = undefined;
+        var font_light_48: Font = undefined;
+        var font_light_64: Font = undefined;
+        var font_light_72: Font = undefined;
+        var font_light_96: Font = undefined;
+        var font_regular_16: Font = undefined;
+        var font_regular_24: Font = undefined;
+        var font_regular_32: Font = undefined;
+        var font_regular_48: Font = undefined;
+        var font_regular_64: Font = undefined;
+        var font_regular_72: Font = undefined;
+        var font_regular_96: Font = undefined;
+        var font_medium_16: Font = undefined;
+        var font_medium_24: Font = undefined;
+        var font_medium_32: Font = undefined;
+        var font_medium_48: Font = undefined;
+        var font_medium_64: Font = undefined;
+        var font_medium_72: Font = undefined;
+        var font_medium_96: Font = undefined;
+        var font_semibold_16: Font = undefined;
+        var font_semibold_24: Font = undefined;
+        var font_semibold_32: Font = undefined;
+        var font_semibold_48: Font = undefined;
+        var font_semibold_64: Font = undefined;
+        var font_semibold_72: Font = undefined;
+        var font_semibold_96: Font = undefined;
+        var font_bold_16: Font = undefined;
+        var font_bold_24: Font = undefined;
+        var font_bold_32: Font = undefined;
+        var font_bold_48: Font = undefined;
+        var font_bold_64: Font = undefined;
+        var font_bold_72: Font = undefined;
+        var font_bold_96: Font = undefined;
+        var font_extrabold_16: Font = undefined;
+        var font_extrabold_24: Font = undefined;
+        var font_extrabold_32: Font = undefined;
+        var font_extrabold_48: Font = undefined;
+        var font_extrabold_64: Font = undefined;
+        var font_extrabold_72: Font = undefined;
+        var font_extrabold_96: Font = undefined;
+        var font_black_16: Font = undefined;
+        var font_black_24: Font = undefined;
+        var font_black_32: Font = undefined;
+        var font_black_48: Font = undefined;
+        var font_black_64: Font = undefined;
+        var font_black_72: Font = undefined;
+        var font_black_96: Font = undefined;
+
+        const font_data_light = @embedFile("resources/Font/Geist/Geist-Light.ttf");
+        const font_data_regular = @embedFile("resources/Font/Geist/Geist-Regular.ttf");
+        const font_data_medium = @embedFile("resources/Font/Geist/Geist-Medium.ttf");
+        const font_data_semibold = @embedFile("resources/Font/Geist/Geist-SemiBold.ttf");
+        const font_data_bold = @embedFile("resources/Font/Geist/Geist-Bold.ttf");
+        const font_data_extrabold = @embedFile("resources/Font/Geist/Geist-ExtraBold.ttf");
+        const font_data_black = @embedFile("resources/Font/Geist/Geist-Black.ttf");
+
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_light, 16, &font_light_16 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_light, 24, &font_light_24 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_light, 32, &font_light_32 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_light, 48, &font_light_48 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_light, 64, &font_light_64 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_light, 72, &font_light_72 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_light, 96, &font_light_96 });
+
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_regular, 16, &font_regular_16 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_regular, 24, &font_regular_24 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_regular, 32, &font_regular_32 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_regular, 48, &font_regular_48 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_regular, 64, &font_regular_64 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_regular, 72, &font_regular_72 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_regular, 96, &font_regular_96 });
+
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_medium, 16, &font_medium_16 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_medium, 24, &font_medium_24 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_medium, 32, &font_medium_32 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_medium, 48, &font_medium_48 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_medium, 64, &font_medium_64 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_medium, 72, &font_medium_72 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_medium, 96, &font_medium_96 });
+
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_semibold, 16, &font_semibold_16 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_semibold, 24, &font_semibold_24 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_semibold, 32, &font_semibold_32 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_semibold, 48, &font_semibold_48 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_semibold, 64, &font_semibold_64 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_semibold, 72, &font_semibold_72 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_semibold, 96, &font_semibold_96 });
+
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_bold, 16, &font_bold_16 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_bold, 24, &font_bold_24 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_bold, 32, &font_bold_32 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_bold, 48, &font_bold_48 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_bold, 64, &font_bold_64 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_bold, 72, &font_bold_72 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_bold, 96, &font_bold_96 });
+
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_extrabold, 16, &font_extrabold_16 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_extrabold, 24, &font_extrabold_24 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_extrabold, 32, &font_extrabold_32 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_extrabold, 48, &font_extrabold_48 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_extrabold, 64, &font_extrabold_64 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_extrabold, 72, &font_extrabold_72 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_extrabold, 96, &font_extrabold_96 });
+
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_black, 16, &font_black_16 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_black, 24, &font_black_24 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_black, 32, &font_black_32 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_black, 48, &font_black_48 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_black, 64, &font_black_64 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_black, 72, &font_black_72 });
+        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_black, 96, &font_black_96 });
+
+        thread_pool.deinit();
+
+        return FontCollection{
+            .font_light_16 = font_light_16,
+            .font_light_24 = font_light_24,
+            .font_light_32 = font_light_32,
+            .font_light_48 = font_light_48,
+            .font_light_64 = font_light_64,
+            .font_light_72 = font_light_72,
+            .font_light_96 = font_light_96,
+            .font_regular_16 = font_regular_16,
+            .font_regular_24 = font_regular_24,
+            .font_regular_32 = font_regular_32,
+            .font_regular_48 = font_regular_48,
+            .font_regular_64 = font_regular_64,
+            .font_regular_72 = font_regular_72,
+            .font_regular_96 = font_regular_96,
+            .font_medium_16 = font_medium_16,
+            .font_medium_24 = font_medium_24,
+            .font_medium_32 = font_medium_32,
+            .font_medium_48 = font_medium_48,
+            .font_medium_64 = font_medium_64,
+            .font_medium_72 = font_medium_72,
+            .font_medium_96 = font_medium_96,
+            .font_semibold_16 = font_semibold_16,
+            .font_semibold_24 = font_semibold_24,
+            .font_semibold_32 = font_semibold_32,
+            .font_semibold_48 = font_semibold_48,
+            .font_semibold_64 = font_semibold_64,
+            .font_semibold_72 = font_semibold_72,
+            .font_semibold_96 = font_semibold_96,
+            .font_bold_16 = font_bold_16,
+            .font_bold_24 = font_bold_24,
+            .font_bold_32 = font_bold_32,
+            .font_bold_48 = font_bold_48,
+            .font_bold_64 = font_bold_64,
+            .font_bold_72 = font_bold_72,
+            .font_bold_96 = font_bold_96,
+            .font_extrabold_16 = font_extrabold_16,
+            .font_extrabold_24 = font_extrabold_24,
+            .font_extrabold_32 = font_extrabold_32,
+            .font_extrabold_48 = font_extrabold_48,
+            .font_extrabold_64 = font_extrabold_64,
+            .font_extrabold_72 = font_extrabold_72,
+            .font_extrabold_96 = font_extrabold_96,
+            .font_black_16 = font_black_16,
+            .font_black_24 = font_black_24,
+            .font_black_32 = font_black_32,
+            .font_black_48 = font_black_48,
+            .font_black_64 = font_black_64,
+            .font_black_72 = font_black_72,
+            .font_black_96 = font_black_96,
+        };
     }
 };
