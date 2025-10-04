@@ -63,19 +63,19 @@ pub fn main() !void {
         renderer.drawRect(5, 5, 200, 50, .{ 1.0, 0.5, 0.0, 1.0 });
         renderer.drawRect(0, 0, 100, 100, .{ 0.0, 0.0, 1.0, 0.2 });
         renderer.drawRect(100, 100, 200, 50, .{ 1.0, 0.5, 0.0, 1.0 });
-        renderer.drawRoundedBorderRect(350, 100, 100, 100, 0, .{ 0.2, 0.8, 0.3, 1.0 }, 8, .{ 0.0, 0.0, 0.0, 1.0 });
+        renderer.drawRoundedBorderRect(350, 100, 100, 100, 0, .{ 0.2, 0.8, 0.3, 1.0 }, .{8} ** 4, .{ 0.0, 0.0, 0.0, 1.0 });
 
-        renderer.drawRoundedBorderRect(200, 300, 400, 300, 120, .{ 0.8, 0.2, 0.2, 1.0 }, 4, .{ 0, 0, 0, 1 });
+        renderer.drawRoundedBorderRect(200, 300, 400, 300, 120, .{ 0.8, 0.2, 0.2, 1.0 }, .{ 4, 8, 2, 6 }, .{ 1, 1, 0, 1 });
         renderer.drawRoundedRect(1000, 0, 100, 100, 12, .{ 1.0, 0.0, 0.0, 1.0 });
-        renderer.drawRoundedBorderRect(800, 400, 140, 100, 12, .{ 1.0, 1.0, 0.0, 0.8 }, 2, .{ 0.0, 0.0, 0.0, 1.0 });
+        renderer.drawRoundedBorderRect(800, 400, 140, 100, 12, .{ 1.0, 1.0, 0.0, 0.8 }, .{2} ** 4, .{ 0.0, 0.0, 0.0, 1.0 });
 
-        renderer.drawRect(95, 55, 800, 800, .{ 0.0, 0.0, 0.0, 1.0 });
-        try renderer.drawText(font.font_collection_geist,
-            \\Hällö, World!éáó
-            \\Lorem ipsum dolor sit.
-            \\Nullam euismod, nisl?
-            \\NULLAM EUISMOD, NISL?
-        , 100, 60, 60, .regular, .{ 1.0, 1.0, 1.0, 1.0 });
+        // renderer.drawRect(95, 55, 800, 800, .{ 0.0, 0.0, 0.0, 1.0 });
+        // try renderer.drawText(font.font_collection_geist,
+        //     \\Hällö, World!éáó
+        //     \\Lorem ipsum dolor sit.
+        //     \\Nullam euismod, nisl?
+        //     \\NULLAM EUISMOD, NISL?
+        // , 100, 60, 60, .regular, .{ 1.0, 1.0, 1.0, 1.0 });
         renderer.end();
 
         // Swap buffers & poll events

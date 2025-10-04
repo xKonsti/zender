@@ -77,12 +77,12 @@ const InstanceData = struct {
     size: [2]f32, // unscaled width,height
     color: [4]f32,
     corner_radius: f32, // unscaled
-    border_width: f32, // unscaled
+    border_width: [4]f32, // unscaled t,r,b,l
     border_color: [4]f32,
     use_texture: c_int, // 0 = solid, 1 = textured
     uv_data: [4]f32, // for text/images, UV data (x, y, width, height)
 
-    fn fromRect(x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]f32, border_width: f32, border_color: [4]f32) InstanceData {
+    fn fromRect(x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]f32, border_width: [4]f32, border_color: [4]f32) InstanceData {
         return InstanceData{
             .pos_tl = .{ x, y },
             .size = .{ w, h },
@@ -101,9 +101,9 @@ const InstanceData = struct {
         assert(@offsetOf(InstanceData, "color") == (2 + 2) * @sizeOf(f32));
         assert(@offsetOf(InstanceData, "corner_radius") == (2 + 2 + 4) * @sizeOf(f32));
         assert(@offsetOf(InstanceData, "border_width") == (2 + 2 + 4 + 1) * @sizeOf(f32));
-        assert(@offsetOf(InstanceData, "border_color") == (2 + 2 + 4 + 1 + 1) * @sizeOf(f32));
-        assert(@offsetOf(InstanceData, "use_texture") == (2 + 2 + 4 + 1 + 1 + 4) * @sizeOf(f32));
-        assert(@offsetOf(InstanceData, "uv_data") == (2 + 2 + 4 + 1 + 1 + 4 + 1) * @sizeOf(f32));
+        assert(@offsetOf(InstanceData, "border_color") == (2 + 2 + 4 + 1 + 4) * @sizeOf(f32));
+        assert(@offsetOf(InstanceData, "use_texture") == (2 + 2 + 4 + 1 + 4 + 4) * @sizeOf(f32));
+        assert(@offsetOf(InstanceData, "uv_data") == (2 + 2 + 4 + 1 + 4 + 4 + 1) * @sizeOf(f32));
     }
 };
 
@@ -168,7 +168,7 @@ pub const Renderer2D = struct {
         gl.VertexAttribDivisor(4, 1);
         gl.EnableVertexAttribArray(4);
 
-        gl.VertexAttribPointer(5, 1, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "border_width"));
+        gl.VertexAttribPointer(5, 4, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "border_width"));
         gl.VertexAttribDivisor(5, 1);
         gl.EnableVertexAttribArray(5);
 
@@ -292,14 +292,14 @@ pub const Renderer2D = struct {
     }
 
     pub inline fn drawRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, color: [4]f32) void {
-        drawRoundedBorderRect(self, x, y, w, h, 0.0, color, 0, color);
+        drawRoundedBorderRect(self, x, y, w, h, 0.0, color, .{ 0, 0, 0, 0 }, color);
     }
 
     pub fn drawRoundedRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]f32) void {
-        drawRoundedBorderRect(self, x, y, w, h, r, color, 0, color);
+        drawRoundedBorderRect(self, x, y, w, h, r, color, .{0} ** 4, color);
     }
 
-    pub fn drawRoundedBorderRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]f32, border_width: f32, border_color: [4]f32) void {
+    pub fn drawRoundedBorderRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]f32, border_width: [4]f32, border_color: [4]f32) void {
         if (self.rect_count >= MAX_RECTANGLES) self.flush();
         self.instance_data[self.rect_count] = .fromRect(x, y, w, h, r, color, border_width, border_color);
         self.rect_count += 1;
@@ -382,8 +382,8 @@ pub const Renderer2D = struct {
                 .size = .{ w, h },
                 .color = text_color,
                 .corner_radius = 0,
-                .border_width = 0,
-                .border_color = .{ 0, 0, 0, 0 },
+                .border_width = .{0} ** 4,
+                .border_color = .{0} ** 4,
                 .use_texture = 1,
                 .uv_data = .{
                     @as(f32, @floatFromInt(rect.x)) / @as(f32, @floatFromInt(font.atlas.width)),
