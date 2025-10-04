@@ -404,3 +404,17 @@ pub const Renderer2D = struct {
         self.flush();
     }
 };
+
+pub inline fn clipStart(rect: [4]f32) void {
+    gl.Enable(gl.SCISSOR_TEST);
+    gl.Scissor(
+        @intFromFloat(rect[0]),
+        @intFromFloat(rect[1]),
+        @intFromFloat(rect[2]),
+        @intFromFloat(rect[3]),
+    );
+}
+
+pub inline fn clipEnd() void {
+    gl.Disable(gl.SCISSOR_TEST);
+}

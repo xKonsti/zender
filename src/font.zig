@@ -336,7 +336,8 @@ pub const FontAtlas = struct {
             }
         }
 
-        try writeToBMP(alloc, atlas_w, atlas_h, pixel);
+        // INFO : Just for debug purposes
+        // try writeToBMP(alloc, atlas_w, atlas_h, pixel);
 
         return .{
             .alloc = alloc,

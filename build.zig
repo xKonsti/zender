@@ -74,4 +74,10 @@ fn addDependencies(
     });
 
     exe.root_module.addImport("gl", gl_bindings);
+
+    const zlayout = b.dependency("zlayout", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport("zlayout", zlayout.module("zlayout"));
 }

@@ -46,6 +46,9 @@
         .harfbuzz = .{
             .path = "lib/harfbuzz",
         },
+        .zlayout = .{
+            .path = "../zlayout",
+        },
     },
     .paths = .{
         "build.zig",
