@@ -17,6 +17,14 @@ pub fn init() !void {
 }
 pub const deinit = c.glfwTerminate;
 
+fn scrollCallback(win: ?*c.GLFWwindow, xoffset: f64, yoffset: f64) callconv(.c) void {
+    _ = win;
+    scroll[0] = xoffset;
+    scroll[1] = yoffset;
+}
+
+pub var scroll: [2]f64 = .{ 0, 0 };
+
 pub fn defaultWindowHints() void {
     c.glfwDefaultWindowHints();
     // Set hints if you want a specific OpenGL version (optional)
@@ -32,7 +40,10 @@ pub const Window = struct {
 
     pub fn init(width: u32, height: u32, title: [:0]const u8, monitor: ?*c.GLFWmonitor, share: ?*c.GLFWwindow) !Window {
         const handle = c.glfwCreateWindow(@intCast(width), @intCast(height), title, monitor, share) orelse return error.WindowCreationFailed;
-        return Window{ .handle = handle };
+        _ = c.glfwSetScrollCallback(handle, scrollCallback);
+        return .{
+            .handle = handle,
+        };
     }
 
     pub inline fn deinit(self: Window) void {
@@ -75,6 +86,11 @@ pub const Window = struct {
         var y: f64 = 0;
         c.glfwGetCursorPos(self.handle, &x, &y);
         return .{ x, y };
+    }
+
+    pub fn mouseScroll(self: Window) [2]f64 {
+        _ = self;
+        return scroll;
     }
 
     const CursorIcons = enum(c_int) {

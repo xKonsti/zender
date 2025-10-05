@@ -8,6 +8,8 @@ const FontAtlas = @import("font.zig").FontAtlas;
 const FontCollection = @import("font.zig").FontCollection;
 const FontStyle = @import("font.zig").FontStyle;
 
+var once = false;
+
 pub const Program = struct {
     id: c_uint,
 
@@ -75,14 +77,14 @@ pub const Program = struct {
 const InstanceData = struct {
     pos_tl: [2]f32, // unscaled x,y
     size: [2]f32, // unscaled width,height
-    color: [4]f32,
+    color: [4]u8, // RGBA 0-255
     corner_radius: f32, // unscaled
     border_width: [4]f32, // unscaled t,r,b,l
-    border_color: [4]f32,
+    border_color: [4]u8, // RGBA 0-255
     use_texture: c_int, // 0 = solid, 1 = textured
     uv_data: [4]f32, // for text/images, UV data (x, y, width, height)
 
-    fn fromRect(x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]f32, border_width: [4]f32, border_color: [4]f32) InstanceData {
+    fn fromRect(x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]u8, border_width: [4]f32, border_color: [4]u8) InstanceData {
         return InstanceData{
             .pos_tl = .{ x, y },
             .size = .{ w, h },
@@ -94,20 +96,9 @@ const InstanceData = struct {
             .uv_data = .{ 0, 0, 0, 0 },
         };
     }
-
-    comptime {
-        assert(@offsetOf(InstanceData, "pos_tl") == 0);
-        assert(@offsetOf(InstanceData, "size") == 2 * @sizeOf(f32));
-        assert(@offsetOf(InstanceData, "color") == (2 + 2) * @sizeOf(f32));
-        assert(@offsetOf(InstanceData, "corner_radius") == (2 + 2 + 4) * @sizeOf(f32));
-        assert(@offsetOf(InstanceData, "border_width") == (2 + 2 + 4 + 1) * @sizeOf(f32));
-        assert(@offsetOf(InstanceData, "border_color") == (2 + 2 + 4 + 1 + 4) * @sizeOf(f32));
-        assert(@offsetOf(InstanceData, "use_texture") == (2 + 2 + 4 + 1 + 4 + 4) * @sizeOf(f32));
-        assert(@offsetOf(InstanceData, "uv_data") == (2 + 2 + 4 + 1 + 4 + 4 + 1) * @sizeOf(f32));
-    }
 };
 
-pub const MAX_RECTANGLES = 10_000;
+pub const MAX_RECTANGLES = 8192;
 
 pub const Renderer2D = struct {
     program: Program,
@@ -160,7 +151,7 @@ pub const Renderer2D = struct {
         gl.VertexAttribDivisor(2, 1);
         gl.EnableVertexAttribArray(2);
 
-        gl.VertexAttribPointer(3, 4, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "color"));
+        gl.VertexAttribPointer(3, 4, gl.UNSIGNED_BYTE, gl.TRUE, stride, @offsetOf(InstanceData, "color"));
         gl.VertexAttribDivisor(3, 1);
         gl.EnableVertexAttribArray(3);
 
@@ -172,7 +163,7 @@ pub const Renderer2D = struct {
         gl.VertexAttribDivisor(5, 1);
         gl.EnableVertexAttribArray(5);
 
-        gl.VertexAttribPointer(6, 4, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "border_color"));
+        gl.VertexAttribPointer(6, 4, gl.UNSIGNED_BYTE, gl.TRUE, stride, @offsetOf(InstanceData, "border_color"));
         gl.VertexAttribDivisor(6, 1);
         gl.EnableVertexAttribArray(6);
 
@@ -235,9 +226,9 @@ pub const Renderer2D = struct {
         }
     }
 
-    fn flush(self: *Renderer2D) void {
+    pub fn flush(self: *Renderer2D) void {
         if (self.rect_count == 0) return;
-        std.log.debug("Flushing {d} rectangles", .{self.rect_count});
+        // std.log.debug("Flushing {d} rectangles", .{self.rect_count});
         gl.BindVertexArray(self.vao);
         gl.BindBuffer(gl.ARRAY_BUFFER, self.vbo);
         gl.BufferSubData(gl.ARRAY_BUFFER, 0, @intCast(self.rect_count * @sizeOf(InstanceData)), &self.instance_data[0]);
@@ -251,6 +242,8 @@ pub const Renderer2D = struct {
     }
 
     pub fn uploadAtlas(self: *Renderer2D, font_atlas: FontAtlas) void {
+        const now = std.time.microTimestamp();
+        defer std.debug.print("uploadAtlas took {d}us\n", .{std.time.microTimestamp() - now});
         // Make sure we target texture unit 0 because that's what the shader expects via Uniform1i(...)
         gl.ActiveTexture(gl.TEXTURE0);
         gl.BindTexture(gl.TEXTURE_2D, self.atlas_texture);
@@ -291,21 +284,24 @@ pub const Renderer2D = struct {
         }
     }
 
-    pub inline fn drawRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, color: [4]f32) void {
+    pub inline fn drawRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, color: [4]u8) void {
         drawRoundedBorderRect(self, x, y, w, h, 0.0, color, .{ 0, 0, 0, 0 }, color);
     }
 
-    pub fn drawRoundedRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]f32) void {
+    pub fn drawRoundedRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]u8) void {
         drawRoundedBorderRect(self, x, y, w, h, r, color, .{0} ** 4, color);
     }
 
-    pub fn drawRoundedBorderRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]f32, border_width: [4]f32, border_color: [4]f32) void {
+    pub fn drawRoundedBorderRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]u8, border_width: [4]f32, border_color: [4]u8) void {
         if (self.rect_count >= MAX_RECTANGLES) self.flush();
         self.instance_data[self.rect_count] = .fromRect(x, y, w, h, r, color, border_width, border_color);
         self.rect_count += 1;
     }
 
-    pub fn drawText(self: *Renderer2D, font_collection: FontCollection, text: []const u8, x: f32, y: f32, size: f32, style: FontStyle, text_color: [4]f32) !void {
+    pub fn drawText(self: *Renderer2D, font_collection: FontCollection, text: []const u8, x: f32, y: f32, size: f32, style: FontStyle, text_color: [4]u8) !void {
+        const now = std.time.milliTimestamp();
+        defer std.debug.print("drawText took {d}ms\n", .{std.time.milliTimestamp() - now});
+
         const font = font_collection.getFont(size, style);
         if (self.current_texture_id == null or self.current_font_id == null or self.current_font_id.? != font.id) {
             self.flush();

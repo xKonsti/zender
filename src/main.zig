@@ -31,7 +31,7 @@ pub fn main() !void {
     defer window.deinit();
 
     glfw.makeContextCurrent(window.handle);
-    glfw.swapInterval(1);
+    glfw.swapInterval(0);
 
     // Initialize OpenGL function table
     if (!procs.init(glfw.getProcAddress)) {
@@ -52,11 +52,16 @@ pub fn main() !void {
     zlay.configure(.{
         .allocator = alloc,
         .measure_text = renderer.measureText,
+        .perf_info = false,
     });
 
     // Main loop
+    var prev_frame_time: i64 = std.time.milliTimestamp();
     while (!window.shouldClose()) {
         const now = std.time.milliTimestamp();
+        const delta_ms = now - prev_frame_time;
+        prev_frame_time = now;
+        const delta_time = @as(f32, @floatFromInt(delta_ms)) / 1000;
         defer std.debug.print("Frame took {d}ms\n", .{std.time.milliTimestamp() - now});
 
         // const mouse_pos = window.mousePos();
@@ -71,14 +76,21 @@ pub fn main() !void {
         pencil.begin(window.bufferSize(), window.getContentScale());
 
         const mouse_pos = window.mousePos();
-        const buffer_size = window.windowSize();
+        const window_size = window.windowSize();
+        const scroll = window.mouseScroll();
+
+        // std.debug.print("delta time: {d}\twith scroll: {d} {d}\n", .{ last_frame_time, scroll[0], scroll[1] });
+
         zlay.startLayout(.{
             .is_down = false,
             .x = @floatCast(mouse_pos[0]),
             .y = @floatCast(mouse_pos[1]),
-        }, .{}, .{
-            .w = @floatFromInt(buffer_size[0]),
-            .h = @floatFromInt(buffer_size[1]),
+        }, .{
+            .delta = .{ .x = @floatCast(scroll[0]), .y = @floatCast(scroll[1]) },
+            .delta_time = @floatCast(delta_time),
+        }, .{
+            .w = @floatFromInt(window_size[0]),
+            .h = @floatFromInt(window_size[1]),
         });
 
         interface();
@@ -99,22 +111,13 @@ pub fn main() !void {
         //     \\Nullam euismod, nisl?
         //     \\NULLAM EUISMOD, NISL?
         // , 100, 60, 60, .regular, .{ 1.0, 1.0, 1.0, 1.0 });
-        renderer.draw(zlay.endLayout());
+        renderer.draw(zlay.endLayout(), &window);
         pencil.end();
 
         // Swap buffers & poll events
         window.swapBuffers();
         glfw.pollEvents();
     }
-}
-
-fn ortho(l: f32, r: f32, bottom: f32, top: f32, near: f32, far: f32) [16]f32 {
-    return [_]f32{
-        2 / (r - l),        0,                                0,                            0,
-        0,                  2 / (top - bottom),               0,                            0,
-        0,                  0,                                -2 / (far - near),            0,
-        -(r + l) / (r - l), -(top + bottom) / (top - bottom), -(far + near) / (far - near), 1,
-    };
 }
 
 fn interface() void {
@@ -124,15 +127,17 @@ fn interface() void {
         .height = .full,
         .bg_color = .red,
         .padding = .all(8),
+        .gap = 8,
+        .alignment = .center_left,
     })) {
         defer zlay.close();
 
         if (zlay.open(.{
             .id = .from("left_panel"),
-            .width = .fixed(120),
+            .width = .fixed(200),
             .height = .full,
             .bg_color = .light_300,
-            .border = .all(4, .dark_100),
+            .border = .all(8, .dark_100),
             .padding = .all(8),
             .gap = 8,
             .direction = .y,
@@ -140,101 +145,69 @@ fn interface() void {
             .corner_radius = .all(12),
         })) {
             defer zlay.close();
+            const hov = zlay.hovered();
 
             zlay.text("Zender", .{
-                .id = .from("zender"),
+                .id = .from(@src()),
                 .font_size = 24,
                 .text_color = .dark_300,
                 .font_style = .bold,
             });
 
             zlay.text("Zender is a ui drawing library", .{
-                .font_size = 16,
+                .id = .from(@src()),
+                .font_size = 18,
                 .text_color = .dark_300,
                 .font_style = .bold,
                 .width = .full,
             });
-        }
-    }
-}
 
-fn blueprintInterface() void {
-    const GAPS_AND_ROUNDING = 8;
-    const BORDER_COLOR: zlay.RGBA = .dark_100;
+            // if (hov) { // TODO: Why does this hover case the next panel to change background color from transparent to light_200?
 
-    if (zlay.open(.{
-        .id = .from("root"),
-        .width = .full,
-        .height = .full,
-        .padding = .all(8),
-    })) {
-        defer zlay.close();
-
-        if (zlay.open(.{
-            .id = .from("l_panel"),
-            .width = .fixed(120),
-            .height = .full,
-            .bg_color = .light_300,
-            .border = .{ .r = 1, .color = BORDER_COLOR },
-            .padding = .all(GAPS_AND_ROUNDING),
-            .gap = GAPS_AND_ROUNDING,
-            .direction = .y,
-            .corner_radius = .{ .bottom_left = 8, .top_left = 8 },
-        })) {
-            defer zlay.close();
-        }
-        if (zlay.open(.{
-            .id = .from("main_panel"),
-            .width = .grow,
-            .height = .grow,
-            .bg_color = .light_100,
-            .gap = 40,
-            .padding = .all(GAPS_AND_ROUNDING),
-            .direction = .y,
-        })) {
-            defer zlay.close();
-
-            if (zlay.open(.{
-                .id = .from(@src()),
-                .width = .fixed(120),
-                .height = .fixed(400),
-                .bg_color = .light_300,
-                .direction = .y,
-                .padding = .all(4),
-                .scroll = .{ .y = true, .x = true },
-                .gap = 4,
-            })) {
-                defer zlay.close();
-                // inline for (0..200) |i| {
-                //     if (zlay.open(.{
-                //         .id = .from(i),
-                //         .width = .full,
-                //         .height = .fixed(60),
-                //         .bg_color = .orange,
-                //         .alignment = .center,
-                //         .corner_radius = .all(4),
-                //     })) {
-                //         defer zlay.close();
-                //
-                //         zlay.text("Beispieltext", .{});
-                //     }
-                // }
+            if (hov) {
+                if (zlay.open(.{
+                    .width = .full,
+                    .height = .fixed(50),
+                    .corner_radius = .all(4),
+                    .bg_color = .dark_300,
+                })) {
+                    defer zlay.close();
+                }
             }
-
-            zlay.text("Hallo", .{
-                .id = .from("hallo"),
-                .text_color = .dark_300,
-            });
+            zlay.text(
+                "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit",
+                .{
+                    .id = .from(@src()),
+                    .font_size = 16,
+                    .font_style = .medium,
+                    .text_color = .dark_300,
+                    .width = .full,
+                },
+            );
+            // }
         }
 
         if (zlay.open(.{
-            .id = .from("r_panel"),
-            .width = .fixed(120),
-            .height = .full,
-            .bg_color = .light_300,
-            .border = .{ .l = 1, .color = BORDER_COLOR },
+            .id = .from("next_panel"),
+            .width = .fixed(200),
+            .height = .percent(0.5),
+            .bg_color = .light_200,
+            .scroll = .{ .y = true },
+            .padding = .all(8),
+            .corner_radius = .all(4),
+            .border = .all(8, .withAlpha(.dark_100, 1.0)),
         })) {
             defer zlay.close();
+
+            zlay.text(
+                "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit" ** 20,
+                .{
+                    .font_size = 16,
+                    .font_style = .medium,
+                    .text_color = .dark_300,
+                    .width = .full,
+                },
+            );
         }
     }
 }

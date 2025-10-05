@@ -5,28 +5,33 @@ const openGL = @import("openGL.zig");
 const glfw = @import("glfw.zig");
 const pencil = &@import("main.zig").pencil;
 
-pub fn draw(cmds: []const zlay.DrawCommand) void {
+pub fn draw(cmds: []const zlay.DrawCommand, window: *glfw.Window) void {
+    // const window_h = @as(f32, @floatFromInt(window.windowSize()[1]));
+    const scale = window.getContentScale();
     for (cmds) |cmd| {
         switch (cmd) {
             .clipStart => |clip| {
+                pencil.flush();
                 const rect: [4]f32 = .{
-                    clip.rect.x,
-                    clip.rect.y,
-                    clip.rect.width,
-                    clip.rect.height,
+                    clip.rect.x * scale[0],
+                    clip.rect.y * scale[1],
+                    clip.rect.width * scale[0],
+                    clip.rect.height * scale[1],
                 };
+                // _ = rect;
                 openGL.clipStart(rect);
             },
             .clipEnd => {
+                pencil.flush();
                 openGL.clipEnd();
             },
             .drawRect => |rect_cmd| {
                 const rect = rect_cmd.rect_on_screen;
-                const color: [4]f32 = .{
-                    @as(f32, @floatFromInt(rect_cmd.color.r)) / 255,
-                    @as(f32, @floatFromInt(rect_cmd.color.g)) / 255,
-                    @as(f32, @floatFromInt(rect_cmd.color.b)) / 255,
-                    @as(f32, @floatFromInt(rect_cmd.color.a)) / 255,
+                const color: [4]u8 = .{
+                    rect_cmd.color.r,
+                    rect_cmd.color.g,
+                    rect_cmd.color.b,
+                    rect_cmd.color.a,
                 };
                 const border_widths: [4]f32 =
                     if (rect_cmd.border) |border|
@@ -38,13 +43,13 @@ pub fn draw(cmds: []const zlay.DrawCommand) void {
                         }
                     else
                         .{0} ** 4;
-                const border_color: [4]f32 =
+                const border_color: [4]u8 =
                     if (rect_cmd.border) |border|
                         .{
-                            @as(f32, @floatFromInt(border.color.r)) / 255,
-                            @as(f32, @floatFromInt(border.color.g)) / 255,
-                            @as(f32, @floatFromInt(border.color.b)) / 255,
-                            @as(f32, @floatFromInt(border.color.a)) / 255,
+                            border.color.r,
+                            border.color.g,
+                            border.color.b,
+                            border.color.a,
                         }
                     else
                         .{0} ** 4;
@@ -70,11 +75,11 @@ pub fn draw(cmds: []const zlay.DrawCommand) void {
                     .semibold => .semibold,
                     .bold => .bold,
                 };
-                const text_color: [4]f32 = .{
-                    @as(f32, @floatFromInt(text_config.text_color.r)) / 255,
-                    @as(f32, @floatFromInt(text_config.text_color.g)) / 255,
-                    @as(f32, @floatFromInt(text_config.text_color.b)) / 255,
-                    @as(f32, @floatFromInt(text_config.text_color.a)) / 255,
+                const text_color: [4]u8 = .{
+                    text_config.text_color.r,
+                    text_config.text_color.g,
+                    text_config.text_color.b,
+                    text_config.text_color.a,
                 };
                 const text = text_cmd.text;
 
