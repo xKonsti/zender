@@ -52,7 +52,7 @@ pub fn main() !void {
     zlay.configure(.{
         .allocator = alloc,
         .measure_text = renderer.measureText,
-        .perf_info = false,
+        .perf_info = true,
     });
 
     // Main loop
@@ -192,12 +192,37 @@ fn interface() void {
             .width = .fixed(200),
             .height = .percent(0.5),
             .bg_color = .light_200,
-            .scroll = .{ .y = true },
-            .padding = .all(8),
-            .corner_radius = .all(4),
+            .scroll = .{ .y = true, .x = true },
+            .padding = .all(16),
+            .corner_radius = .all(40),
             .border = .all(8, .withAlpha(.dark_100, 1.0)),
+            .gap = 4,
         })) {
             defer zlay.close();
+
+            // for (0..2000) |i| {
+            //     if (zlay.open(.{
+            //         .id = .from(i),
+            //         .bg_color = .orange,
+            //         .corner_radius = .all(4),
+            //     })) {
+            //         defer zlay.close();
+            //         zlay.text("Hello world", .{
+            //             .font_size = 16,
+            //             .font_style = .medium,
+            //             .text_color = .dark_300,
+            //         });
+            //     }
+            //     // if (zlay.open(.{
+            //     //     .id = .from(i),
+            //     //     .width = .fixed(32),
+            //     //     .height = .fixed(32),
+            //     //     .bg_color = .orange,
+            //     //     .corner_radius = .all(4),
+            //     // })) {
+            //     //     defer zlay.close();
+            //     // }
+            // }
 
             zlay.text(
                 "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit" ** 20,

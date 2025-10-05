@@ -53,27 +53,35 @@ void main() {
     if (v_use_texture == 1) {
         float mask = texture(tex, v_uv).r;
         color.a *= mask;
+        out_color = color;
+        return;
     }
 
-    // Outer/inner SDFs
+    // Compute distance to outer rectangle
     float dist_outer = RoundedRectSDF(sample_pos, rect_center, half_size, corner_radius);
-    float dist_inner = RoundedRectInsetSDF(sample_pos, rect_center, half_size, corner_radius, border_width);
 
+    // Compute distance to inner rectangle (inset by border)
+    vec2 inset_half = half_size - 0.5 * vec2(border_width.w + border_width.y, border_width.x + border_width.z);
+    float inset_radius = max(0.0, corner_radius - 0.5 * max(max(border_width.x, border_width.y), max(border_width.z, border_width.w)));
+    float dist_inner = RoundedRectSDF(sample_pos, rect_center, inset_half, inset_radius);
+
+    // Compute softness for anti-aliasing
     float softness_outer = fwidth(dist_outer);
     float softness_inner = fwidth(dist_inner);
 
-    if (dist_outer > 0.0) {
-        // Outside outer shape
-        discard;
-    } else if (dist_inner < 0.0) {
-        // Inside inner content region
-        float alpha = 1.0 - smoothstep(0.0, softness_inner, dist_inner);
-        out_color = vec4(color.rgb, color.a * alpha);
-    } else {
-        // Between outer and inner -> border
-        float alpha_outer = 1.0 - smoothstep(0.0, softness_outer, dist_outer);
-        float alpha_inner = smoothstep(0.0, softness_inner, dist_inner);
-        float alpha = min(alpha_outer, alpha_inner);
-        out_color = vec4(border_color.rgb, border_color.a * alpha);
-    }
+    // Border alpha = inside outer, outside inner
+    float alpha_border = smoothstep(0.0, softness_outer, -dist_outer) * smoothstep(0.0, softness_inner, dist_inner);
+
+    // Fill alpha = inside inner
+    float alpha_fill = 1.0 - smoothstep(0.0, softness_inner, dist_inner);
+
+    // Discard outside outer
+    if (dist_outer > 0.0) discard;
+
+    // Combine border and fill to avoid 1-pixel gaps
+    float alpha = clamp(alpha_fill + alpha_border, 0.0, 1.0);
+    out_color = vec4(
+            mix(color.rgb, border_color.rgb, alpha_border / alpha),
+            alpha
+            );
 }

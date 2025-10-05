@@ -299,8 +299,8 @@ pub const Renderer2D = struct {
     }
 
     pub fn drawText(self: *Renderer2D, font_collection: FontCollection, text: []const u8, x: f32, y: f32, size: f32, style: FontStyle, text_color: [4]u8) !void {
-        const now = std.time.milliTimestamp();
-        defer std.debug.print("drawText took {d}ms\n", .{std.time.milliTimestamp() - now});
+        // const now = std.time.milliTimestamp();
+        // defer std.debug.print("drawText took {d}ms\n", .{std.time.milliTimestamp() - now});
 
         const font = font_collection.getFont(size, style);
         if (self.current_texture_id == null or self.current_font_id == null or self.current_font_id.? != font.id) {
