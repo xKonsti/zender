@@ -57,6 +57,11 @@ void main() {
         return;
     }
 
+    if (rect_color.a == 0.0) {
+        out_color = color;
+        return;
+    }
+
     // Compute distance to outer rectangle
     float dist_outer = RoundedRectSDF(sample_pos, rect_center, half_size, corner_radius);
 

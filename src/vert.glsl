@@ -22,8 +22,8 @@ out vec2 v_uv;
 uniform vec4 window_params;
 
 void main() {
-    vec2 buffer_size = window_params.xy; // already scaled so no need to multiply
     vec2 window_scale = window_params.zw;
+    vec2 buffer_size = window_params.xy * window_scale;
     
     vec2 inst_size_scaled = inst_size * window_scale;
     vec2 inst_tl_scaled = inst_tl * window_scale; // Top-left in window coords
@@ -35,7 +35,7 @@ void main() {
     gl_Position = vec4(ndc, 0.0, 1.0);
 
     rect_center = inst_tl_scaled + inst_size_scaled / 2; // Center in window coords
-    rect_center.y = window_params.y - rect_center.y;
+    rect_center.y = buffer_size.y - rect_center.y;
     rect_size = inst_size_scaled;
     rect_color = inst_color;
     corner_radius = min(inst_corner_radius * min(window_scale.x, window_scale.y), min(inst_size_scaled.x, inst_size_scaled.y));

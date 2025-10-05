@@ -12,7 +12,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
-    addDependencies(b, exe, target, optimize);
+    addDependencies(b, exe.root_module, target, optimize);
 
     b.installArtifact(exe);
 
@@ -31,6 +31,14 @@ pub fn build(b: *std.Build) void {
         .root_module = exe.root_module,
     });
 
+    const lib = b.addModule("zender", .{
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    addDependencies(b, lib, target, optimize);
+
     const run_exe_tests = b.addRunArtifact(exe_tests);
 
     const test_step = b.step("test", "Run tests");
@@ -39,7 +47,7 @@ pub fn build(b: *std.Build) void {
 
 fn addDependencies(
     b: *std.Build,
-    exe: *std.Build.Step.Compile,
+    mod: *std.Build.Module,
     target: anytype,
     optimize: anytype,
 ) void {
@@ -48,8 +56,8 @@ fn addDependencies(
         .optimize = optimize,
     });
 
-    exe.root_module.linkLibrary(freetype.artifact("freetype"));
-    exe.root_module.addIncludePath(freetype.path("include"));
+    mod.linkLibrary(freetype.artifact("freetype"));
+    mod.addIncludePath(freetype.path("include"));
     // exe.root_module.addImport("freetype_c", freetype.module("freetype_mod"));
 
     const harfbuzz = b.dependency("harfbuzz", .{
@@ -57,14 +65,14 @@ fn addDependencies(
         .optimize = optimize,
     });
 
-    exe.root_module.addIncludePath(harfbuzz.path("src"));
-    exe.root_module.linkLibrary(harfbuzz.artifact("harfbuzz"));
+    mod.addIncludePath(harfbuzz.path("src"));
+    mod.linkLibrary(harfbuzz.artifact("harfbuzz"));
 
     const glfw = b.dependency("glfw_zig", .{
         .target = target,
         .optimize = optimize,
     });
-    exe.root_module.linkLibrary(glfw.artifact("glfw"));
+    mod.linkLibrary(glfw.artifact("glfw"));
 
     const gl_bindings = @import("zigglgen").generateBindingsModule(b, .{
         .api = .gl,
@@ -73,11 +81,11 @@ fn addDependencies(
         .extensions = &.{ .ARB_clip_control, .NV_scissor_exclusive },
     });
 
-    exe.root_module.addImport("gl", gl_bindings);
+    mod.addImport("gl", gl_bindings);
 
     const zlayout = b.dependency("zlayout", .{
         .target = target,
         .optimize = optimize,
     });
-    exe.root_module.addImport("zlayout", zlayout.module("zlayout"));
+    mod.addImport("zlayout", zlayout.module("zlayout"));
 }

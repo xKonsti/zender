@@ -5,7 +5,7 @@ const openGL = @import("openGL.zig");
 const glfw = @import("glfw.zig");
 const pencil = &@import("main.zig").pencil;
 
-pub fn draw(cmds: []const zlay.DrawCommand, window: *glfw.Window) void {
+pub fn draw(cmds: []const zlay.DrawCommand, window: glfw.Window) void {
     // const window_h = @as(f32, @floatFromInt(window.windowSize()[1]));
     const scale = window.getContentScale();
     for (cmds) |cmd| {
@@ -74,6 +74,7 @@ pub fn draw(cmds: []const zlay.DrawCommand, window: *glfw.Window) void {
                     .medium => .medium,
                     .semibold => .semibold,
                     .bold => .bold,
+                    .black => .black,
                 };
                 const text_color: [4]u8 = .{
                     text_config.text_color.r,
@@ -110,6 +111,7 @@ pub fn measureText(text: []const u8, config: zlay.TextProps) zlay.Dimensions {
         .medium => .medium,
         .semibold => .semibold,
         .bold => .bold,
+        .black => .black,
     };
     const size: f32 = @floatFromInt(config.font_size);
     if (config.font_id != 0) {

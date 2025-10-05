@@ -29,8 +29,8 @@ var scroll_accum: [2]f64 = .{ 0, 0 };
 pub fn defaultWindowHints() void {
     c.glfwDefaultWindowHints();
     // Set hints if you want a specific OpenGL version (optional)
-    c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MAJOR, 3);
-    c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MINOR, 3);
+    c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MAJOR, 4);
+    c.glfwWindowHint(c.GLFW_CONTEXT_VERSION_MINOR, 1);
     c.glfwWindowHint(c.GLFW_OPENGL_PROFILE, c.GLFW_OPENGL_CORE_PROFILE);
     // On macOS, also:
     c.glfwWindowHint(c.GLFW_OPENGL_FORWARD_COMPAT, c.GLFW_TRUE);
@@ -75,7 +75,10 @@ pub const Window = struct {
         c.glfwSwapBuffers(self.handle);
     }
 
+    /// only important on macOS
     pub inline fn getContentScale(self: Window) [2]f32 {
+        if (@import("builtin").os.tag != .macos) return .{ 1, 1 };
+
         var x: f32 = 0;
         var y: f32 = 0;
         c.glfwGetWindowContentScale(self.handle, &x, &y);
@@ -99,7 +102,7 @@ pub const Window = struct {
         _ = self;
         var d = scroll_accum;
         // Apply small deadzone to avoid tiny residual scroll and stop sharper
-        const deadzone: f64 = 0.8;
+        const deadzone: f64 = 1.0;
         if (@abs(d[0]) < deadzone) d[0] = 0;
         if (@abs(d[1]) < deadzone) d[1] = 0;
         scroll_accum = .{ 0, 0 };

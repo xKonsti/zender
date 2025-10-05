@@ -31,9 +31,9 @@ pub fn main() !void {
     defer window.deinit();
 
     glfw.makeContextCurrent(window.handle);
-    glfw.swapInterval(0);
+    glfw.swapInterval(1);
 
-    // Initialize OpenGL function table
+    // // Initialize OpenGL function table
     if (!procs.init(glfw.getProcAddress)) {
         return error.OpenGLLoadFailed;
     }
@@ -73,7 +73,7 @@ pub fn main() !void {
 
         program.use();
 
-        pencil.begin(window.bufferSize(), window.getContentScale());
+        pencil.begin(window.windowSize(), window.getContentScale());
 
         const mouse_pos = window.mousePos();
         const window_size = window.windowSize();
@@ -155,17 +155,17 @@ fn interface() void {
                 .font_style = .bold,
             });
 
-            zlay.text("Zender is a ui drawing library", .{
-                .id = .from(@src()),
-                .font_size = 18,
-                .text_color = .dark_300,
-                .font_style = .bold,
-                .width = .full,
-            });
-
-            // if (hov) { // TODO: Why does this hover case the next panel to change background color from transparent to light_200?
-
             if (hov) {
+                zlay.text("Zender is a ui drawing library", .{
+                    .id = .from(@src()),
+                    .font_size = 18,
+                    .text_color = .dark_300,
+                    .font_style = .bold,
+                    .width = .full,
+                });
+
+                // TODO: Why does this hover case the next panel to change background color from transparent to light_200?
+
                 if (zlay.open(.{
                     .width = .full,
                     .height = .fixed(50),
@@ -174,23 +174,22 @@ fn interface() void {
                 })) {
                     defer zlay.close();
                 }
+                zlay.text(
+                    "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit",
+                    .{
+                        .id = .from(@src()),
+                        .font_size = 16,
+                        .font_style = .medium,
+                        .text_color = .dark_300,
+                        .width = .full,
+                    },
+                );
             }
-            zlay.text(
-                "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit",
-                .{
-                    .id = .from(@src()),
-                    .font_size = 16,
-                    .font_style = .medium,
-                    .text_color = .dark_300,
-                    .width = .full,
-                },
-            );
-            // }
         }
 
         if (zlay.open(.{
             .id = .from("next_panel"),
-            .width = .fixed(200),
+            .width = .fixed(400),
             .height = .percent(0.5),
             .bg_color = .light_200,
             .scroll = .{ .y = true, .x = true },
@@ -198,43 +197,50 @@ fn interface() void {
             .corner_radius = .all(40),
             .border = .all(8, .withAlpha(.dark_100, 1.0)),
             .gap = 4,
-            .direction = .y,
+            .direction = .x,
         })) {
             defer zlay.close();
 
-            for (0..2000) |i| {
-                // if (zlay.open(.{
-                //     .id = .from(i),
-                //     .bg_color = .orange,
-                //     .corner_radius = .all(4),
-                // })) {
-                //     defer zlay.close();
-                //     zlay.text("Hello world", .{
-                //         .font_size = 16,
-                //         .font_style = .medium,
-                //         .text_color = .dark_300,
-                //     });
-                // }
-                if (zlay.open(.{
-                    .id = .from(i),
-                    .width = .fixed(32),
-                    .height = .fixed(32),
-                    .bg_color = .orange,
-                    .corner_radius = .all(4),
-                })) {
-                    defer zlay.close();
+            if (zlay.open(.{
+                .gap = 8,
+                .direction = .y,
+            })) {
+                defer zlay.close();
+
+                for (0..2000) |i| {
+                    // if (zlay.open(.{
+                    //     .id = .from(i),
+                    //     .bg_color = .orange,
+                    //     .corner_radius = .all(4),
+                    // })) {
+                    //     defer zlay.close();
+                    //     zlay.text("Hello world", .{
+                    //         .font_size = 16,
+                    //         .font_style = .medium,
+                    //         .text_color = .dark_300,
+                    //     });
+                    // }
+                    if (zlay.open(.{
+                        .id = .from(i),
+                        .width = .fixed(32),
+                        .height = .fixed(32),
+                        .bg_color = .orange,
+                        .corner_radius = .all(4),
+                    })) {
+                        defer zlay.close();
+                    }
                 }
             }
 
-            // zlay.text(
-            //     "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit" ** 20,
-            //     .{
-            //         .font_size = 16,
-            //         .font_style = .medium,
-            //         .text_color = .dark_300,
-            //         .width = .full,
-            //     },
-            // );
+            zlay.text(
+                "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit" ** 20,
+                .{
+                    .font_size = 16,
+                    .font_style = .medium,
+                    .text_color = .dark_300,
+                    .width = .grow,
+                },
+            );
         }
     }
 }
