@@ -10,6 +10,70 @@ const FontStyle = @import("font.zig").FontStyle;
 
 var once = false;
 
+// --- Per-frame shaping cache (shared by measureText and drawText) ---
+const ShapeCacheKey = struct {
+    font_id: u64,
+    text_hash: u64,
+    text_len: usize,
+
+    pub fn hash(self: @This()) u64 {
+        var h = std.hash.Wyhash.init(0);
+        h.update(std.mem.asBytes(&self.font_id));
+        h.update(std.mem.asBytes(&self.text_hash));
+        h.update(std.mem.asBytes(&self.text_len));
+        return h.final();
+    }
+
+    pub fn eql(a: @This(), b: @This()) bool {
+        return a.font_id == b.font_id and a.text_len == b.text_len and a.text_hash == b.text_hash;
+    }
+};
+
+const ShapeCache = struct {
+    allocator: std.mem.Allocator,
+    map: std.AutoHashMapUnmanaged(ShapeCacheKey, []const @import("font.zig").ShapedGlyph) = .{},
+
+    pub fn init(allocator: std.mem.Allocator) ShapeCache {
+        return .{ .allocator = allocator };
+    }
+
+    pub fn deinit(self: *ShapeCache) void {
+        // free cached shaped glyph arrays
+        var it = self.map.iterator();
+        while (it.next()) |entry| {
+            // glyph arrays were allocated using the font alloc; free through any font API
+            // We don't store per-entry font pointer, but all fonts share same API to free
+            // Choose any representative font to call deinitShapedText; slices were allocated
+            // with that font's allocator, but Zig's allocators are compatible for free
+            // as they store allocator pointer in slice metadata. Use self.allocator to free directly.
+            self.allocator.free(entry.value_ptr.*);
+        }
+        self.map.deinit(self.allocator);
+    }
+
+    pub fn beginFrame(self: *ShapeCache) void {
+        // Free all entries and clear
+        var it = self.map.iterator();
+        while (it.next()) |entry| {
+            self.allocator.free(entry.value_ptr.*);
+        }
+        self.map.clearRetainingCapacity();
+    }
+
+    pub fn get(self: *ShapeCache, font_ref: Font, text: []const u8) ![]const @import("font.zig").ShapedGlyph {
+        var h = std.hash.Wyhash.init(0);
+        h.update(text);
+        const key = ShapeCacheKey{ .font_id = font_ref.id, .text_hash = h.final(), .text_len = text.len };
+
+        if (self.map.get(key)) |cached| return cached;
+
+        const shaped = try font_ref.shapeText(text);
+        // store a copy owned by this cache (shapeText already allocs a fresh slice)
+        try self.map.put(self.allocator, key, shaped);
+        return shaped;
+    }
+};
+
 pub const Program = struct {
     id: c_uint,
 
@@ -111,8 +175,11 @@ pub const Renderer2D = struct {
     current_font_id: ?u64,
     current_texture_id: ?u32,
     atlas_texture: c_uint,
+    allocator: std.mem.Allocator,
+    font_textures: std.AutoHashMap(u64, c_uint), // font.id -> texture id
+    shape_cache: ShapeCache,
 
-    pub fn init(program: Program) !Renderer2D {
+    pub fn init(allocator: std.mem.Allocator, program: Program) !Renderer2D {
         var vao: c_uint = undefined;
         gl.GenVertexArrays(1, (&vao)[0..1]);
         gl.BindVertexArray(vao); // Bind VAO first
@@ -202,10 +269,20 @@ pub const Renderer2D = struct {
             .current_font_id = null,
             .current_texture_id = null,
             .atlas_texture = atlas_texture,
+            .allocator = allocator,
+            .font_textures = std.AutoHashMap(u64, c_uint).init(allocator),
+            .shape_cache = ShapeCache.init(allocator),
         };
     }
 
     pub fn deinit(self: *Renderer2D) void {
+        // delete cached textures
+        var it = self.font_textures.iterator();
+        while (it.next()) |entry| {
+            gl.DeleteTextures(1, (&entry.value_ptr.*)[0..1]);
+        }
+        self.font_textures.deinit();
+        self.shape_cache.deinit(&@import("font.zig").font_collection_geist);
         gl.DeleteVertexArrays(1, (&self.vao)[0..1]);
         gl.DeleteBuffers(1, (&self.vbo)[0..1]);
         gl.DeleteBuffers(1, (&self.base_vbo)[0..1]);
@@ -215,6 +292,8 @@ pub const Renderer2D = struct {
 
     pub fn begin(self: *Renderer2D, window_size: [2]u32, window_scale: [2]f32) void {
         self.rect_count = 0;
+        // reset per-frame caches
+        self.shape_cache.beginFrame();
         gl.BindVertexArray(self.vao);
         gl.UseProgram(self.program.id);
         gl.Uniform4f(self.program.window_params_loc, @floatFromInt(window_size[0]), @floatFromInt(window_size[1]), window_scale[0], window_scale[1]);
@@ -241,12 +320,12 @@ pub const Renderer2D = struct {
         }
     }
 
-    pub fn uploadAtlas(self: *Renderer2D, font_atlas: FontAtlas) void {
+    fn uploadAtlasToTexture(texture: c_uint, font_atlas: FontAtlas) void {
         const now = std.time.microTimestamp();
         defer std.debug.print("uploadAtlas took {d}us\n", .{std.time.microTimestamp() - now});
         // Make sure we target texture unit 0 because that's what the shader expects via Uniform1i(...)
         gl.ActiveTexture(gl.TEXTURE0);
-        gl.BindTexture(gl.TEXTURE_2D, self.atlas_texture);
+        gl.BindTexture(gl.TEXTURE_2D, texture);
 
         // Pixel alignment for single-channel data
         gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1);
@@ -284,6 +363,17 @@ pub const Renderer2D = struct {
         }
     }
 
+    fn getOrCreateAtlasTexture(self: *Renderer2D, font_atlas: FontAtlas, font_id: u64) c_uint {
+        if (self.font_textures.get(font_id)) |tex| return tex;
+        var tex: c_uint = undefined;
+        gl.GenTextures(1, (&tex)[0..1]);
+        uploadAtlasToTexture(tex, font_atlas);
+        self.font_textures.put(font_id, tex) catch |err| {
+            std.log.err("Failed to cache font texture: {s}", .{@errorName(err)});
+        };
+        return tex;
+    }
+
     pub inline fn drawRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, color: [4]u8) void {
         drawRoundedBorderRect(self, x, y, w, h, 0.0, color, .{ 0, 0, 0, 0 }, color);
     }
@@ -305,13 +395,14 @@ pub const Renderer2D = struct {
         const font = font_collection.getFont(size, style);
         if (self.current_texture_id == null or self.current_font_id == null or self.current_font_id.? != font.id) {
             self.flush();
-            self.uploadAtlas(font.atlas);
-            self.current_texture_id = self.atlas_texture;
+            const tex = self.getOrCreateAtlasTexture(font.atlas, font.id);
+            gl.ActiveTexture(gl.TEXTURE0);
+            gl.BindTexture(gl.TEXTURE_2D, tex);
+            self.current_texture_id = tex;
             self.current_font_id = font.id;
         }
 
-        const glyphs = try font.shapeText(text);
-        defer font.deinitShapedText(glyphs);
+        const glyphs = try self.shape_cache.get(font, text);
 
         // scale between the atlas rasterization size (font.pixel_height) and requested size
         const scale = size / font.pixel_height;

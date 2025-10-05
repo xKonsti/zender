@@ -126,11 +126,11 @@ pub fn measureText(text: []const u8, config: zlay.TextProps) zlay.Dimensions {
     const line_advance_px = @as(f32, @floatFromInt(font_obj.ft_face.*.size.*.metrics.height)) / 64.0;
 
     // Shape text using HarfBuzz
-    const glyphs = font_obj.shapeText(text) catch |err| {
+    const glyphs = pencil.shape_cache.get(font_obj, text) catch |err| {
         std.log.err("Shape text failed: {s}", .{@errorName(err)});
         return zlay.Dimensions{ .w = 0, .h = 0 };
     };
-    defer font_obj.deinitShapedText(glyphs);
+    // owned by per-frame cache; no defer free here
 
     var cursor_x: f32 = 0.0;
     var cursor_y: f32 = 0.0;
