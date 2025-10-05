@@ -8,8 +8,6 @@ const FontAtlas = @import("font.zig").FontAtlas;
 const FontCollection = @import("font.zig").FontCollection;
 const FontStyle = @import("font.zig").FontStyle;
 
-var once = false;
-
 // --- Per-frame shaping cache (shared by measureText and drawText) ---
 const ShapeCacheKey = struct {
     font_id: u64,
@@ -270,8 +268,8 @@ pub const Renderer2D = struct {
             .current_texture_id = null,
             .atlas_texture = atlas_texture,
             .allocator = allocator,
-            .font_textures = std.AutoHashMap(u64, c_uint).init(allocator),
-            .shape_cache = ShapeCache.init(allocator),
+            .font_textures = .init(allocator),
+            .shape_cache = .init(allocator),
         };
     }
 

@@ -77,7 +77,9 @@ pub fn main() !void {
 
         const mouse_pos = window.mousePos();
         const window_size = window.windowSize();
-        const scroll = window.mouseScroll();
+        // Important: poll events BEFORE reading accumulated scroll
+        glfw.pollEvents();
+        const scroll = window.takeMouseScrollDelta();
 
         // std.debug.print("delta time: {d}\twith scroll: {d} {d}\n", .{ last_frame_time, scroll[0], scroll[1] });
 
@@ -114,9 +116,8 @@ pub fn main() !void {
         renderer.draw(zlay.endLayout(), &window);
         pencil.end();
 
-        // Swap buffers & poll events
+        // Swap buffers
         window.swapBuffers();
-        glfw.pollEvents();
     }
 }
 

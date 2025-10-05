@@ -19,11 +19,12 @@ pub const deinit = c.glfwTerminate;
 
 fn scrollCallback(win: ?*c.GLFWwindow, xoffset: f64, yoffset: f64) callconv(.c) void {
     _ = win;
-    scroll[0] = xoffset;
-    scroll[1] = yoffset;
+    // accumulate deltas until read in the frame
+    scroll_accum[0] += xoffset;
+    scroll_accum[1] += yoffset;
 }
 
-pub var scroll: [2]f64 = .{ 0, 0 };
+var scroll_accum: [2]f64 = .{ 0, 0 };
 
 pub fn defaultWindowHints() void {
     c.glfwDefaultWindowHints();
@@ -90,7 +91,19 @@ pub const Window = struct {
 
     pub fn mouseScroll(self: Window) [2]f64 {
         _ = self;
-        return scroll;
+        return scroll_accum; // raw (non-resetting) access if needed
+    }
+
+    /// Returns the accumulated scroll delta since last call and resets it to zero.
+    pub fn takeMouseScrollDelta(self: Window) [2]f64 {
+        _ = self;
+        var d = scroll_accum;
+        // Apply small deadzone to avoid tiny residual scroll and stop sharper
+        const deadzone: f64 = 0.8;
+        if (@abs(d[0]) < deadzone) d[0] = 0;
+        if (@abs(d[1]) < deadzone) d[1] = 0;
+        scroll_accum = .{ 0, 0 };
+        return d;
     }
 
     const CursorIcons = enum(c_int) {
