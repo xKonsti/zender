@@ -81,7 +81,7 @@ pub const core = struct {
         return glfw_mod.c.glfwWindowShouldClose(window.handle) == glfw_mod.c.GLFW_TRUE;
     }
 
-    pub fn startFrame() void {
+    pub fn beginFrame() void {
         glfw_mod.pollEvents();
         opengl_mod.c.ClearColor(0.2, 0.3, 0.3, 1);
         opengl_mod.c.Clear(opengl_mod.c.COLOR_BUFFER_BIT);

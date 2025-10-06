@@ -47,6 +47,8 @@ float RoundedRectInsetSDF(vec2 p, vec2 center, vec2 half_size, float r, vec4 bor
 void main() {
     vec2 sample_pos = gl_FragCoord.xy;
     vec2 half_size = rect_size * 0.5;
+    // at max it should be half the size
+    float corner_radius_clamped =  min(corner_radius, min(half_size.x, half_size.y));
 
     // Base fill color (textured or solid)
     vec4 color = rect_color;
@@ -63,11 +65,11 @@ void main() {
     }
 
     // Compute distance to outer rectangle
-    float dist_outer = RoundedRectSDF(sample_pos, rect_center, half_size, corner_radius);
+    float dist_outer = RoundedRectSDF(sample_pos, rect_center, half_size, corner_radius_clamped);
 
     // Compute distance to inner rectangle (inset by border)
     vec2 inset_half = half_size - 0.5 * vec2(border_width.w + border_width.y, border_width.x + border_width.z);
-    float inset_radius = max(0.0, corner_radius - 0.5 * max(max(border_width.x, border_width.y), max(border_width.z, border_width.w)));
+    float inset_radius = max(0.0, corner_radius_clamped - 0.5 * max(max(border_width.x, border_width.y), max(border_width.z, border_width.w)));
     float dist_inner = RoundedRectSDF(sample_pos, rect_center, inset_half, inset_radius);
 
     // Compute softness for anti-aliasing
