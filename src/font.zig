@@ -125,6 +125,7 @@ pub const Font = struct {
     }
 
     pub fn deinit(self: *Font) void {
+        //TODO: find out why FT_Done_Face fails
         if (ft.FT_Done_Face(self.ft_face) != ft.FT_Err_Ok) {
             std.log.err("Failed to deinitialize font face", .{});
         }

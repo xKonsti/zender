@@ -2,6 +2,8 @@ const zen = @import("root.zig");
 const std = @import("std");
 const zlay = zen.layout;
 
+var text: std.ArrayList(u8) = .empty;
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer {
@@ -61,6 +63,14 @@ fn interface() void {
                 .font_size = 24,
                 .text_color = .dark_300,
                 .font_style = .bold,
+            });
+
+            zlay.text(text.items, .{
+                .id = .from(@src()),
+                .font_size = 18,
+                .text_color = .dark_300,
+                .font_style = .bold,
+                .width = .full,
             });
 
             if (hov) {

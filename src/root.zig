@@ -32,6 +32,9 @@ pub const core = struct {
         window = try glfw_mod.Window.init(screen_dimensions[0], screen_dimensions[1], title, null, null);
         errdefer window.deinit();
 
+        // Set up key callback
+        _ = glfw_mod.c.glfwSetKeyCallback(window.handle, keyCallback);
+
         glfw_mod.makeContextCurrent(window.handle);
         glfw_mod.swapInterval(1); // enable vsync
 
@@ -306,7 +309,222 @@ pub const drawing = struct {
 // =============================================================================
 // IO (i.e. Keyboard, Mouse, ...)
 // =============================================================================
-pub const io = struct {};
+// Key queue system for proper input handling
+const MAX_KEY_QUEUE = 16;
+var key_pressed_queue: [MAX_KEY_QUEUE]c_int = [_]c_int{0} ** MAX_KEY_QUEUE;
+var key_pressed_queue_count: usize = 0;
+
+fn keyCallback(win: ?*glfw_mod.c.GLFWwindow, key: c_int, scancode: c_int, action: c_int, mods: c_int) callconv(.c) void {
+    _ = win;
+    _ = scancode;
+    _ = mods;
+
+    if (action == glfw_mod.c.GLFW_PRESS and key_pressed_queue_count < MAX_KEY_QUEUE) {
+        key_pressed_queue[key_pressed_queue_count] = key;
+        key_pressed_queue_count += 1;
+    }
+}
+pub const io = struct {
+    pub const ASCIIKEY = enum(i32) {
+        // Letters
+        A = glfw_mod.c.GLFW_KEY_A,
+        B = glfw_mod.c.GLFW_KEY_B,
+        C = glfw_mod.c.GLFW_KEY_C,
+        D = glfw_mod.c.GLFW_KEY_D,
+        E = glfw_mod.c.GLFW_KEY_E,
+        F = glfw_mod.c.GLFW_KEY_F,
+        G = glfw_mod.c.GLFW_KEY_G,
+        H = glfw_mod.c.GLFW_KEY_H,
+        I = glfw_mod.c.GLFW_KEY_I,
+        J = glfw_mod.c.GLFW_KEY_J,
+        K = glfw_mod.c.GLFW_KEY_K,
+        L = glfw_mod.c.GLFW_KEY_L,
+        M = glfw_mod.c.GLFW_KEY_M,
+        N = glfw_mod.c.GLFW_KEY_N,
+        O = glfw_mod.c.GLFW_KEY_O,
+        P = glfw_mod.c.GLFW_KEY_P,
+        Q = glfw_mod.c.GLFW_KEY_Q,
+        R = glfw_mod.c.GLFW_KEY_R,
+        S = glfw_mod.c.GLFW_KEY_S,
+        T = glfw_mod.c.GLFW_KEY_T,
+        U = glfw_mod.c.GLFW_KEY_U,
+        V = glfw_mod.c.GLFW_KEY_V,
+        W = glfw_mod.c.GLFW_KEY_W,
+        X = glfw_mod.c.GLFW_KEY_X,
+        Y = glfw_mod.c.GLFW_KEY_Y,
+        Z = glfw_mod.c.GLFW_KEY_Z,
+
+        // Numbers
+        KEY_0 = glfw_mod.c.GLFW_KEY_0,
+        KEY_1 = glfw_mod.c.GLFW_KEY_1,
+        KEY_2 = glfw_mod.c.GLFW_KEY_2,
+        KEY_3 = glfw_mod.c.GLFW_KEY_3,
+        KEY_4 = glfw_mod.c.GLFW_KEY_4,
+        KEY_5 = glfw_mod.c.GLFW_KEY_5,
+        KEY_6 = glfw_mod.c.GLFW_KEY_6,
+        KEY_7 = glfw_mod.c.GLFW_KEY_7,
+        KEY_8 = glfw_mod.c.GLFW_KEY_8,
+        KEY_9 = glfw_mod.c.GLFW_KEY_9,
+
+        // Special keys
+        SPACE = glfw_mod.c.GLFW_KEY_SPACE,
+        APOSTROPHE = glfw_mod.c.GLFW_KEY_APOSTROPHE,
+        COMMA = glfw_mod.c.GLFW_KEY_COMMA,
+        MINUS = glfw_mod.c.GLFW_KEY_MINUS,
+        PERIOD = glfw_mod.c.GLFW_KEY_PERIOD,
+        SLASH = glfw_mod.c.GLFW_KEY_SLASH,
+        SEMICOLON = glfw_mod.c.GLFW_KEY_SEMICOLON,
+        EQUAL = glfw_mod.c.GLFW_KEY_EQUAL,
+        LEFT_BRACKET = glfw_mod.c.GLFW_KEY_LEFT_BRACKET,
+        BACKSLASH = glfw_mod.c.GLFW_KEY_BACKSLASH,
+        RIGHT_BRACKET = glfw_mod.c.GLFW_KEY_RIGHT_BRACKET,
+        GRAVE_ACCENT = glfw_mod.c.GLFW_KEY_GRAVE_ACCENT,
+
+        // Function keys
+        ESCAPE = glfw_mod.c.GLFW_KEY_ESCAPE,
+        ENTER = glfw_mod.c.GLFW_KEY_ENTER,
+        TAB = glfw_mod.c.GLFW_KEY_TAB,
+        BACKSPACE = glfw_mod.c.GLFW_KEY_BACKSPACE,
+        INSERT = glfw_mod.c.GLFW_KEY_INSERT,
+        DELETE = glfw_mod.c.GLFW_KEY_DELETE,
+
+        // Arrow keys
+        RIGHT = glfw_mod.c.GLFW_KEY_RIGHT,
+        LEFT = glfw_mod.c.GLFW_KEY_LEFT,
+        DOWN = glfw_mod.c.GLFW_KEY_DOWN,
+        UP = glfw_mod.c.GLFW_KEY_UP,
+
+        // Modifier keys
+        LEFT_SHIFT = glfw_mod.c.GLFW_KEY_LEFT_SHIFT,
+        LEFT_CONTROL = glfw_mod.c.GLFW_KEY_LEFT_CONTROL,
+        LEFT_ALT = glfw_mod.c.GLFW_KEY_LEFT_ALT,
+        LEFT_SUPER = glfw_mod.c.GLFW_KEY_LEFT_SUPER,
+        RIGHT_SHIFT = glfw_mod.c.GLFW_KEY_RIGHT_SHIFT,
+        RIGHT_CONTROL = glfw_mod.c.GLFW_KEY_RIGHT_CONTROL,
+        RIGHT_ALT = glfw_mod.c.GLFW_KEY_RIGHT_ALT,
+        RIGHT_SUPER = glfw_mod.c.GLFW_KEY_RIGHT_SUPER,
+
+        // Function keys
+        F1 = glfw_mod.c.GLFW_KEY_F1,
+        F2 = glfw_mod.c.GLFW_KEY_F2,
+        F3 = glfw_mod.c.GLFW_KEY_F3,
+        F4 = glfw_mod.c.GLFW_KEY_F4,
+        F5 = glfw_mod.c.GLFW_KEY_F5,
+        F6 = glfw_mod.c.GLFW_KEY_F6,
+        F7 = glfw_mod.c.GLFW_KEY_F7,
+        F8 = glfw_mod.c.GLFW_KEY_F8,
+        F9 = glfw_mod.c.GLFW_KEY_F9,
+        F10 = glfw_mod.c.GLFW_KEY_F10,
+        F11 = glfw_mod.c.GLFW_KEY_F11,
+        F12 = glfw_mod.c.GLFW_KEY_F12,
+    };
+
+    pub fn isKeyDown(key: ASCIIKEY) bool {
+        const state = glfw_mod.c.glfwGetKey(window.handle, @intFromEnum(key));
+        return state == glfw_mod.c.GLFW_PRESS or state == glfw_mod.c.GLFW_REPEAT;
+    }
+
+    pub fn isKeyPressed(key: ASCIIKEY) bool {
+        const state = glfw_mod.c.glfwGetKey(window.handle, @intFromEnum(key));
+        return state == glfw_mod.c.GLFW_PRESS;
+    }
+
+    pub fn getMousePosition() [2]f64 {
+        return window.mousePos();
+    }
+
+    pub fn getMouseScrollDelta() [2]f64 {
+        return window.takeMouseScrollDelta();
+    }
+
+    pub const MouseButton = enum(c_int) {
+        LEFT = glfw_mod.c.GLFW_MOUSE_BUTTON_LEFT,
+        RIGHT = glfw_mod.c.GLFW_MOUSE_BUTTON_RIGHT,
+        MIDDLE = glfw_mod.c.GLFW_MOUSE_BUTTON_MIDDLE,
+    };
+
+    pub fn isMouseButtonDown(button: MouseButton) bool {
+        const state = glfw_mod.c.glfwGetMouseButton(window.handle, @intFromEnum(button));
+        return state == glfw_mod.c.GLFW_PRESS;
+    }
+
+    pub fn getKeyPressed() ?ASCIIKEY {
+        if (key_pressed_queue_count == 0) return null;
+
+        // Get first key from queue
+        const glfw_key = key_pressed_queue[0];
+
+        // Shift remaining keys down
+        var i: usize = 0;
+        while (i < key_pressed_queue_count - 1) : (i += 1) {
+            key_pressed_queue[i] = key_pressed_queue[i + 1];
+        }
+        key_pressed_queue_count -= 1;
+
+        // Convert GLFW key code to our ASCIIKEY enum
+        return switch (glfw_key) {
+            glfw_mod.c.GLFW_KEY_A => .A,
+            glfw_mod.c.GLFW_KEY_B => .B,
+            glfw_mod.c.GLFW_KEY_C => .C,
+            glfw_mod.c.GLFW_KEY_D => .D,
+            glfw_mod.c.GLFW_KEY_E => .E,
+            glfw_mod.c.GLFW_KEY_F => .F,
+            glfw_mod.c.GLFW_KEY_G => .G,
+            glfw_mod.c.GLFW_KEY_H => .H,
+            glfw_mod.c.GLFW_KEY_I => .I,
+            glfw_mod.c.GLFW_KEY_J => .J,
+            glfw_mod.c.GLFW_KEY_K => .K,
+            glfw_mod.c.GLFW_KEY_L => .L,
+            glfw_mod.c.GLFW_KEY_M => .M,
+            glfw_mod.c.GLFW_KEY_N => .N,
+            glfw_mod.c.GLFW_KEY_O => .O,
+            glfw_mod.c.GLFW_KEY_P => .P,
+            glfw_mod.c.GLFW_KEY_Q => .Q,
+            glfw_mod.c.GLFW_KEY_R => .R,
+            glfw_mod.c.GLFW_KEY_S => .S,
+            glfw_mod.c.GLFW_KEY_T => .T,
+            glfw_mod.c.GLFW_KEY_U => .U,
+            glfw_mod.c.GLFW_KEY_V => .V,
+            glfw_mod.c.GLFW_KEY_W => .W,
+            glfw_mod.c.GLFW_KEY_X => .X,
+            glfw_mod.c.GLFW_KEY_Y => .Y,
+            glfw_mod.c.GLFW_KEY_Z => .Z,
+            glfw_mod.c.GLFW_KEY_0 => .KEY_0,
+            glfw_mod.c.GLFW_KEY_1 => .KEY_1,
+            glfw_mod.c.GLFW_KEY_2 => .KEY_2,
+            glfw_mod.c.GLFW_KEY_3 => .KEY_3,
+            glfw_mod.c.GLFW_KEY_4 => .KEY_4,
+            glfw_mod.c.GLFW_KEY_5 => .KEY_5,
+            glfw_mod.c.GLFW_KEY_6 => .KEY_6,
+            glfw_mod.c.GLFW_KEY_7 => .KEY_7,
+            glfw_mod.c.GLFW_KEY_8 => .KEY_8,
+            glfw_mod.c.GLFW_KEY_9 => .KEY_9,
+            glfw_mod.c.GLFW_KEY_SPACE => .SPACE,
+            glfw_mod.c.GLFW_KEY_ESCAPE => .ESCAPE,
+            glfw_mod.c.GLFW_KEY_ENTER => .ENTER,
+            glfw_mod.c.GLFW_KEY_TAB => .TAB,
+            glfw_mod.c.GLFW_KEY_BACKSPACE => .BACKSPACE,
+            glfw_mod.c.GLFW_KEY_LEFT => .LEFT,
+            glfw_mod.c.GLFW_KEY_RIGHT => .RIGHT,
+            glfw_mod.c.GLFW_KEY_UP => .UP,
+            glfw_mod.c.GLFW_KEY_DOWN => .DOWN,
+            glfw_mod.c.GLFW_KEY_F1 => .F1,
+            glfw_mod.c.GLFW_KEY_F2 => .F2,
+            glfw_mod.c.GLFW_KEY_F3 => .F3,
+            glfw_mod.c.GLFW_KEY_F4 => .F4,
+            glfw_mod.c.GLFW_KEY_F5 => .F5,
+            glfw_mod.c.GLFW_KEY_F6 => .F6,
+            glfw_mod.c.GLFW_KEY_F7 => .F7,
+            glfw_mod.c.GLFW_KEY_F8 => .F8,
+            glfw_mod.c.GLFW_KEY_F9 => .F9,
+            glfw_mod.c.GLFW_KEY_F10 => .F10,
+            glfw_mod.c.GLFW_KEY_F11 => .F11,
+            glfw_mod.c.GLFW_KEY_F12 => .F12,
+            // Add other keys as needed, return null for unmapped keys
+            else => null,
+        };
+    }
+};
 
 // =============================================================================
 // MISC & NO PROPER PLACE FOUND YET
