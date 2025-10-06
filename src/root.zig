@@ -32,8 +32,9 @@ pub const core = struct {
         window = try glfw_mod.Window.init(screen_dimensions[0], screen_dimensions[1], title, null, null);
         errdefer window.deinit();
 
-        // Set up key callback
+        // Set up input callbacks
         _ = glfw_mod.c.glfwSetKeyCallback(window.handle, keyCallback);
+        _ = glfw_mod.c.glfwSetCharCallback(window.handle, charCallback);
 
         glfw_mod.makeContextCurrent(window.handle);
         glfw_mod.swapInterval(1); // enable vsync
@@ -309,24 +310,46 @@ pub const drawing = struct {
 // =============================================================================
 // IO (i.e. Keyboard, Mouse, ...)
 // =============================================================================
-// Key queue system for proper input handling
+// Unicode character input queue (reject when full)
+const MAX_CHAR_QUEUE = 32;
+var char_input_queue: [MAX_CHAR_QUEUE]u21 = [_]u21{0} ** MAX_CHAR_QUEUE;
+var char_input_queue_count: usize = 0;
+
+// Key press queue for non-character keys (arrows, function keys, etc.)
 const MAX_KEY_QUEUE = 16;
 var key_pressed_queue: [MAX_KEY_QUEUE]c_int = [_]c_int{0} ** MAX_KEY_QUEUE;
 var key_pressed_queue_count: usize = 0;
+
+fn charCallback(win: ?*glfw_mod.c.GLFWwindow, codepoint: c_uint) callconv(.c) void {
+    _ = win;
+
+    // Early return if queue is full
+    if (char_input_queue_count >= MAX_CHAR_QUEUE) return;
+
+    // Add character to queue
+    char_input_queue[char_input_queue_count] = @intCast(codepoint);
+    char_input_queue_count += 1;
+}
 
 fn keyCallback(win: ?*glfw_mod.c.GLFWwindow, key: c_int, scancode: c_int, action: c_int, mods: c_int) callconv(.c) void {
     _ = win;
     _ = scancode;
     _ = mods;
 
+    // Only queue non-printable/special keys
     if (action == glfw_mod.c.GLFW_PRESS and key_pressed_queue_count < MAX_KEY_QUEUE) {
-        key_pressed_queue[key_pressed_queue_count] = key;
-        key_pressed_queue_count += 1;
+        switch (key) {
+            glfw_mod.c.GLFW_KEY_ESCAPE, glfw_mod.c.GLFW_KEY_ENTER, glfw_mod.c.GLFW_KEY_TAB, glfw_mod.c.GLFW_KEY_BACKSPACE, glfw_mod.c.GLFW_KEY_DELETE, glfw_mod.c.GLFW_KEY_LEFT, glfw_mod.c.GLFW_KEY_RIGHT, glfw_mod.c.GLFW_KEY_UP, glfw_mod.c.GLFW_KEY_DOWN, glfw_mod.c.GLFW_KEY_F1...glfw_mod.c.GLFW_KEY_F12 => {
+                key_pressed_queue[key_pressed_queue_count] = key;
+                key_pressed_queue_count += 1;
+            },
+            else => {}, // Printable characters handled by charCallback
+        }
     }
 }
 pub const io = struct {
-    pub const ASCIIKEY = enum(i32) {
-        // Letters
+    pub const Key = enum(c_int) {
+        // Letters (for key state polling)
         A = glfw_mod.c.GLFW_KEY_A,
         B = glfw_mod.c.GLFW_KEY_B,
         C = glfw_mod.c.GLFW_KEY_C,
@@ -368,24 +391,12 @@ pub const io = struct {
 
         // Special keys
         SPACE = glfw_mod.c.GLFW_KEY_SPACE,
-        APOSTROPHE = glfw_mod.c.GLFW_KEY_APOSTROPHE,
-        COMMA = glfw_mod.c.GLFW_KEY_COMMA,
-        MINUS = glfw_mod.c.GLFW_KEY_MINUS,
-        PERIOD = glfw_mod.c.GLFW_KEY_PERIOD,
-        SLASH = glfw_mod.c.GLFW_KEY_SLASH,
-        SEMICOLON = glfw_mod.c.GLFW_KEY_SEMICOLON,
-        EQUAL = glfw_mod.c.GLFW_KEY_EQUAL,
-        LEFT_BRACKET = glfw_mod.c.GLFW_KEY_LEFT_BRACKET,
-        BACKSLASH = glfw_mod.c.GLFW_KEY_BACKSLASH,
-        RIGHT_BRACKET = glfw_mod.c.GLFW_KEY_RIGHT_BRACKET,
-        GRAVE_ACCENT = glfw_mod.c.GLFW_KEY_GRAVE_ACCENT,
 
-        // Function keys
+        // Control keys
         ESCAPE = glfw_mod.c.GLFW_KEY_ESCAPE,
         ENTER = glfw_mod.c.GLFW_KEY_ENTER,
         TAB = glfw_mod.c.GLFW_KEY_TAB,
         BACKSPACE = glfw_mod.c.GLFW_KEY_BACKSPACE,
-        INSERT = glfw_mod.c.GLFW_KEY_INSERT,
         DELETE = glfw_mod.c.GLFW_KEY_DELETE,
 
         // Arrow keys
@@ -396,13 +407,9 @@ pub const io = struct {
 
         // Modifier keys
         LEFT_SHIFT = glfw_mod.c.GLFW_KEY_LEFT_SHIFT,
-        LEFT_CONTROL = glfw_mod.c.GLFW_KEY_LEFT_CONTROL,
-        LEFT_ALT = glfw_mod.c.GLFW_KEY_LEFT_ALT,
-        LEFT_SUPER = glfw_mod.c.GLFW_KEY_LEFT_SUPER,
         RIGHT_SHIFT = glfw_mod.c.GLFW_KEY_RIGHT_SHIFT,
+        LEFT_CONTROL = glfw_mod.c.GLFW_KEY_LEFT_CONTROL,
         RIGHT_CONTROL = glfw_mod.c.GLFW_KEY_RIGHT_CONTROL,
-        RIGHT_ALT = glfw_mod.c.GLFW_KEY_RIGHT_ALT,
-        RIGHT_SUPER = glfw_mod.c.GLFW_KEY_RIGHT_SUPER,
 
         // Function keys
         F1 = glfw_mod.c.GLFW_KEY_F1,
@@ -419,12 +426,36 @@ pub const io = struct {
         F12 = glfw_mod.c.GLFW_KEY_F12,
     };
 
-    pub fn isKeyDown(key: ASCIIKEY) bool {
+    pub const SpecialKey = enum(c_int) {
+        ESCAPE = glfw_mod.c.GLFW_KEY_ESCAPE,
+        ENTER = glfw_mod.c.GLFW_KEY_ENTER,
+        TAB = glfw_mod.c.GLFW_KEY_TAB,
+        BACKSPACE = glfw_mod.c.GLFW_KEY_BACKSPACE,
+        DELETE = glfw_mod.c.GLFW_KEY_DELETE,
+        LEFT = glfw_mod.c.GLFW_KEY_LEFT,
+        RIGHT = glfw_mod.c.GLFW_KEY_RIGHT,
+        UP = glfw_mod.c.GLFW_KEY_UP,
+        DOWN = glfw_mod.c.GLFW_KEY_DOWN,
+        F1 = glfw_mod.c.GLFW_KEY_F1,
+        F2 = glfw_mod.c.GLFW_KEY_F2,
+        F3 = glfw_mod.c.GLFW_KEY_F3,
+        F4 = glfw_mod.c.GLFW_KEY_F4,
+        F5 = glfw_mod.c.GLFW_KEY_F5,
+        F6 = glfw_mod.c.GLFW_KEY_F6,
+        F7 = glfw_mod.c.GLFW_KEY_F7,
+        F8 = glfw_mod.c.GLFW_KEY_F8,
+        F9 = glfw_mod.c.GLFW_KEY_F9,
+        F10 = glfw_mod.c.GLFW_KEY_F10,
+        F11 = glfw_mod.c.GLFW_KEY_F11,
+        F12 = glfw_mod.c.GLFW_KEY_F12,
+    };
+
+    pub fn isKeyDown(key: Key) bool {
         const state = glfw_mod.c.glfwGetKey(window.handle, @intFromEnum(key));
         return state == glfw_mod.c.GLFW_PRESS or state == glfw_mod.c.GLFW_REPEAT;
     }
 
-    pub fn isKeyPressed(key: ASCIIKEY) bool {
+    pub fn isKeyPressed(key: Key) bool {
         const state = glfw_mod.c.glfwGetKey(window.handle, @intFromEnum(key));
         return state == glfw_mod.c.GLFW_PRESS;
     }
@@ -448,7 +479,25 @@ pub const io = struct {
         return state == glfw_mod.c.GLFW_PRESS;
     }
 
-    pub fn getKeyPressed() ?ASCIIKEY {
+    /// Get the next Unicode character from input queue, returns null if empty
+    pub fn getCharPressed() ?u21 {
+        if (char_input_queue_count == 0) return null;
+
+        // Get first character
+        const char = char_input_queue[0];
+
+        // Shift remaining characters left
+        var i: usize = 0;
+        while (i < char_input_queue_count - 1) : (i += 1) {
+            char_input_queue[i] = char_input_queue[i + 1];
+        }
+        char_input_queue_count -= 1;
+
+        return char;
+    }
+
+    /// Get next special key press (non-printable keys like arrows, function keys, etc.)
+    pub fn getSpecialKeyPressed() ?SpecialKey {
         if (key_pressed_queue_count == 0) return null;
 
         // Get first key from queue
@@ -461,49 +510,13 @@ pub const io = struct {
         }
         key_pressed_queue_count -= 1;
 
-        // Convert GLFW key code to our ASCIIKEY enum
+        // Convert GLFW key code to SpecialKey enum
         return switch (glfw_key) {
-            glfw_mod.c.GLFW_KEY_A => .A,
-            glfw_mod.c.GLFW_KEY_B => .B,
-            glfw_mod.c.GLFW_KEY_C => .C,
-            glfw_mod.c.GLFW_KEY_D => .D,
-            glfw_mod.c.GLFW_KEY_E => .E,
-            glfw_mod.c.GLFW_KEY_F => .F,
-            glfw_mod.c.GLFW_KEY_G => .G,
-            glfw_mod.c.GLFW_KEY_H => .H,
-            glfw_mod.c.GLFW_KEY_I => .I,
-            glfw_mod.c.GLFW_KEY_J => .J,
-            glfw_mod.c.GLFW_KEY_K => .K,
-            glfw_mod.c.GLFW_KEY_L => .L,
-            glfw_mod.c.GLFW_KEY_M => .M,
-            glfw_mod.c.GLFW_KEY_N => .N,
-            glfw_mod.c.GLFW_KEY_O => .O,
-            glfw_mod.c.GLFW_KEY_P => .P,
-            glfw_mod.c.GLFW_KEY_Q => .Q,
-            glfw_mod.c.GLFW_KEY_R => .R,
-            glfw_mod.c.GLFW_KEY_S => .S,
-            glfw_mod.c.GLFW_KEY_T => .T,
-            glfw_mod.c.GLFW_KEY_U => .U,
-            glfw_mod.c.GLFW_KEY_V => .V,
-            glfw_mod.c.GLFW_KEY_W => .W,
-            glfw_mod.c.GLFW_KEY_X => .X,
-            glfw_mod.c.GLFW_KEY_Y => .Y,
-            glfw_mod.c.GLFW_KEY_Z => .Z,
-            glfw_mod.c.GLFW_KEY_0 => .KEY_0,
-            glfw_mod.c.GLFW_KEY_1 => .KEY_1,
-            glfw_mod.c.GLFW_KEY_2 => .KEY_2,
-            glfw_mod.c.GLFW_KEY_3 => .KEY_3,
-            glfw_mod.c.GLFW_KEY_4 => .KEY_4,
-            glfw_mod.c.GLFW_KEY_5 => .KEY_5,
-            glfw_mod.c.GLFW_KEY_6 => .KEY_6,
-            glfw_mod.c.GLFW_KEY_7 => .KEY_7,
-            glfw_mod.c.GLFW_KEY_8 => .KEY_8,
-            glfw_mod.c.GLFW_KEY_9 => .KEY_9,
-            glfw_mod.c.GLFW_KEY_SPACE => .SPACE,
             glfw_mod.c.GLFW_KEY_ESCAPE => .ESCAPE,
             glfw_mod.c.GLFW_KEY_ENTER => .ENTER,
             glfw_mod.c.GLFW_KEY_TAB => .TAB,
             glfw_mod.c.GLFW_KEY_BACKSPACE => .BACKSPACE,
+            glfw_mod.c.GLFW_KEY_DELETE => .DELETE,
             glfw_mod.c.GLFW_KEY_LEFT => .LEFT,
             glfw_mod.c.GLFW_KEY_RIGHT => .RIGHT,
             glfw_mod.c.GLFW_KEY_UP => .UP,
@@ -520,9 +533,27 @@ pub const io = struct {
             glfw_mod.c.GLFW_KEY_F10 => .F10,
             glfw_mod.c.GLFW_KEY_F11 => .F11,
             glfw_mod.c.GLFW_KEY_F12 => .F12,
-            // Add other keys as needed, return null for unmapped keys
             else => null,
         };
+    }
+
+    // Static buffer to return UTF-8 bytes as slice
+    var utf8_buffer: [4]u8 = undefined;
+
+    /// Get next Unicode character as UTF-8 bytes
+    /// Returns null if no character, or []u8 slice with the UTF-8 bytes
+    pub fn getCharPressedAsUtf8() ?[]u8 {
+        const unicode_char = getCharPressed() orelse return null;
+
+        const len = std.unicode.utf8Encode(unicode_char, &utf8_buffer) catch {
+            // Invalid codepoint, return replacement character (�)
+            utf8_buffer[0] = 0xEF;
+            utf8_buffer[1] = 0xBF;
+            utf8_buffer[2] = 0xBD;
+            return utf8_buffer[0..3];
+        };
+
+        return utf8_buffer[0..len];
     }
 };
 

@@ -73,7 +73,7 @@ fn interface() void {
                 .width = .full,
             });
 
-            if (hov) {
+            if (hov and zen.io.isMouseButtonDown(.RIGHT)) {
                 zlay.text("Zender is a ui drawing library", .{
                     .id = .from(@src()),
                     .font_size = 18,
