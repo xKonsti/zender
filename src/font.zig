@@ -125,7 +125,9 @@ pub const Font = struct {
     }
 
     pub fn deinit(self: *Font) void {
-        assert(ft.FT_Done_Face(self.ft_face) == ft.FT_Err_Ok);
+        if (ft.FT_Done_Face(self.ft_face) != ft.FT_Err_Ok) {
+            std.log.err("Failed to deinitialize font face", .{});
+        }
         harfb.hb_font_destroy(self.harfb_font);
         self.atlas.deinit();
     }

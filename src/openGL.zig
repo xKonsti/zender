@@ -1,7 +1,7 @@
 const std = @import("std");
 const assert = std.debug.assert;
 
-pub const gl = @import("gl");
+pub const c = @import("gl");
 
 const Font = @import("font.zig").Font;
 const FontAtlas = @import("font.zig").FontAtlas;
@@ -79,56 +79,56 @@ pub const Program = struct {
     tex_loc: c_int,
 
     pub fn init(comptime vertex_shader_src: []const u8, comptime fragment_shader_src: []const u8) !Program {
-        const program_id = gl.CreateProgram();
+        const program_id = c.CreateProgram();
 
-        const vs = try compileShader(gl.VERTEX_SHADER, vertex_shader_src);
-        const fs = try compileShader(gl.FRAGMENT_SHADER, fragment_shader_src);
+        const vs = try compileShader(c.VERTEX_SHADER, vertex_shader_src);
+        const fs = try compileShader(c.FRAGMENT_SHADER, fragment_shader_src);
 
-        gl.AttachShader(program_id, vs);
-        gl.AttachShader(program_id, fs);
-        gl.LinkProgram(program_id);
+        c.AttachShader(program_id, vs);
+        c.AttachShader(program_id, fs);
+        c.LinkProgram(program_id);
 
         var success: c_int = undefined;
         var info_log: [512]u8 = undefined;
-        gl.GetProgramiv(program_id, gl.LINK_STATUS, (&success)[0..1]);
+        c.GetProgramiv(program_id, c.LINK_STATUS, (&success)[0..1]);
         if (success == 0) {
-            gl.GetProgramInfoLog(program_id, info_log.len, null, info_log[0..]);
+            c.GetProgramInfoLog(program_id, info_log.len, null, info_log[0..]);
             std.log.err("Program link error: {s}", .{info_log});
             return error.ProgramLinkFailed;
         }
 
-        gl.DeleteShader(vs);
-        gl.DeleteShader(fs);
+        c.DeleteShader(vs);
+        c.DeleteShader(fs);
 
         return .{
             .id = program_id,
-            .window_params_loc = gl.GetUniformLocation(program_id, "window_params"),
-            .tex_loc = gl.GetUniformLocation(program_id, "tex"),
+            .window_params_loc = c.GetUniformLocation(program_id, "window_params"),
+            .tex_loc = c.GetUniformLocation(program_id, "tex"),
         };
     }
 
     pub inline fn deinit(self: Program) void {
-        gl.DeleteProgram(self.id);
+        c.DeleteProgram(self.id);
     }
 
     pub inline fn use(self: Program) void {
-        gl.UseProgram(self.id);
+        c.UseProgram(self.id);
     }
 
     pub inline fn uniformLocation(self: Program, name: [:0]const u8) c_int {
-        return gl.GetUniformLocation(self.id, name);
+        return c.GetUniformLocation(self.id, name);
     }
 
     fn compileShader(kind: c_uint, comptime src: []const u8) !c_uint {
-        const shader = gl.CreateShader(kind);
-        gl.ShaderSource(shader, 1, &.{src.ptr}, &.{src.len});
-        gl.CompileShader(shader);
+        const shader = c.CreateShader(kind);
+        c.ShaderSource(shader, 1, &.{src.ptr}, &.{src.len});
+        c.CompileShader(shader);
 
         var success: c_int = undefined;
         var info_log: [512]u8 = undefined;
-        gl.GetShaderiv(shader, gl.COMPILE_STATUS, (&success)[0..1]);
+        c.GetShaderiv(shader, c.COMPILE_STATUS, (&success)[0..1]);
         if (success == 0) {
-            gl.GetShaderInfoLog(shader, info_log.len, null, info_log[0..]);
+            c.GetShaderInfoLog(shader, info_log.len, null, info_log[0..]);
             std.log.err("Shader compile error: {s}", .{info_log});
             return error.ShaderCompileFailed;
         }
@@ -179,80 +179,80 @@ pub const Renderer2D = struct {
 
     pub fn init(allocator: std.mem.Allocator, program: Program) !Renderer2D {
         var vao: c_uint = undefined;
-        gl.GenVertexArrays(1, (&vao)[0..1]);
-        gl.BindVertexArray(vao); // Bind VAO first
+        c.GenVertexArrays(1, (&vao)[0..1]);
+        c.BindVertexArray(vao); // Bind VAO first
 
         // Base quad vertices (normalized)
         const base_verts = [_][2]f32{ .{ -0.5, -0.5 }, .{ 0.5, -0.5 }, .{ 0.5, 0.5 }, .{ -0.5, 0.5 } };
         var base_vbo: c_uint = undefined;
-        gl.GenBuffers(1, (&base_vbo)[0..1]);
-        gl.BindBuffer(gl.ARRAY_BUFFER, base_vbo);
-        gl.BufferData(gl.ARRAY_BUFFER, base_verts.len * @sizeOf([2]f32), &base_verts[0], gl.STATIC_DRAW);
+        c.GenBuffers(1, (&base_vbo)[0..1]);
+        c.BindBuffer(c.ARRAY_BUFFER, base_vbo);
+        c.BufferData(c.ARRAY_BUFFER, base_verts.len * @sizeOf([2]f32), &base_verts[0], c.STATIC_DRAW);
 
         // Indices: Counter-clockwise
         const base_indices = [_]c_uint{ 0, 1, 2, 0, 2, 3 };
         var base_ebo: c_uint = undefined;
-        gl.GenBuffers(1, (&base_ebo)[0..1]);
-        gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, base_ebo);
-        gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, base_indices.len * @sizeOf(c_uint), &base_indices[0], gl.STATIC_DRAW);
+        c.GenBuffers(1, (&base_ebo)[0..1]);
+        c.BindBuffer(c.ELEMENT_ARRAY_BUFFER, base_ebo);
+        c.BufferData(c.ELEMENT_ARRAY_BUFFER, base_indices.len * @sizeOf(c_uint), &base_indices[0], c.STATIC_DRAW);
 
         // Base vertex attribute
-        gl.VertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, 2 * @sizeOf(f32), 0);
-        gl.EnableVertexAttribArray(0);
+        c.VertexAttribPointer(0, 2, c.FLOAT, c.FALSE, 2 * @sizeOf(f32), 0);
+        c.EnableVertexAttribArray(0);
 
         // Instance VBO (dynamic)
         var vbo: c_uint = undefined;
-        gl.GenBuffers(1, (&vbo)[0..1]);
-        gl.BindBuffer(gl.ARRAY_BUFFER, vbo);
-        gl.BufferData(gl.ARRAY_BUFFER, MAX_RECTANGLES * @sizeOf(InstanceData), null, gl.DYNAMIC_DRAW);
+        c.GenBuffers(1, (&vbo)[0..1]);
+        c.BindBuffer(c.ARRAY_BUFFER, vbo);
+        c.BufferData(c.ARRAY_BUFFER, MAX_RECTANGLES * @sizeOf(InstanceData), null, c.DYNAMIC_DRAW);
 
         // Instance attributes
         const stride: c_uint = @sizeOf(InstanceData);
-        gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "pos_tl"));
-        gl.VertexAttribDivisor(1, 1);
-        gl.EnableVertexAttribArray(1);
+        c.VertexAttribPointer(1, 2, c.FLOAT, c.FALSE, stride, @offsetOf(InstanceData, "pos_tl"));
+        c.VertexAttribDivisor(1, 1);
+        c.EnableVertexAttribArray(1);
 
-        gl.VertexAttribPointer(2, 2, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "size"));
-        gl.VertexAttribDivisor(2, 1);
-        gl.EnableVertexAttribArray(2);
+        c.VertexAttribPointer(2, 2, c.FLOAT, c.FALSE, stride, @offsetOf(InstanceData, "size"));
+        c.VertexAttribDivisor(2, 1);
+        c.EnableVertexAttribArray(2);
 
-        gl.VertexAttribPointer(3, 4, gl.UNSIGNED_BYTE, gl.TRUE, stride, @offsetOf(InstanceData, "color"));
-        gl.VertexAttribDivisor(3, 1);
-        gl.EnableVertexAttribArray(3);
+        c.VertexAttribPointer(3, 4, c.UNSIGNED_BYTE, c.TRUE, stride, @offsetOf(InstanceData, "color"));
+        c.VertexAttribDivisor(3, 1);
+        c.EnableVertexAttribArray(3);
 
-        gl.VertexAttribPointer(4, 1, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "corner_radius"));
-        gl.VertexAttribDivisor(4, 1);
-        gl.EnableVertexAttribArray(4);
+        c.VertexAttribPointer(4, 1, c.FLOAT, c.FALSE, stride, @offsetOf(InstanceData, "corner_radius"));
+        c.VertexAttribDivisor(4, 1);
+        c.EnableVertexAttribArray(4);
 
-        gl.VertexAttribPointer(5, 4, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "border_width"));
-        gl.VertexAttribDivisor(5, 1);
-        gl.EnableVertexAttribArray(5);
+        c.VertexAttribPointer(5, 4, c.FLOAT, c.FALSE, stride, @offsetOf(InstanceData, "border_width"));
+        c.VertexAttribDivisor(5, 1);
+        c.EnableVertexAttribArray(5);
 
-        gl.VertexAttribPointer(6, 4, gl.UNSIGNED_BYTE, gl.TRUE, stride, @offsetOf(InstanceData, "border_color"));
-        gl.VertexAttribDivisor(6, 1);
-        gl.EnableVertexAttribArray(6);
+        c.VertexAttribPointer(6, 4, c.UNSIGNED_BYTE, c.TRUE, stride, @offsetOf(InstanceData, "border_color"));
+        c.VertexAttribDivisor(6, 1);
+        c.EnableVertexAttribArray(6);
 
-        gl.VertexAttribIPointer(7, 1, gl.INT, stride, @offsetOf(InstanceData, "use_texture"));
-        gl.VertexAttribDivisor(7, 1);
-        gl.EnableVertexAttribArray(7);
+        c.VertexAttribIPointer(7, 1, c.INT, stride, @offsetOf(InstanceData, "use_texture"));
+        c.VertexAttribDivisor(7, 1);
+        c.EnableVertexAttribArray(7);
 
-        gl.VertexAttribPointer(8, 4, gl.FLOAT, gl.FALSE, stride, @offsetOf(InstanceData, "uv_data"));
-        gl.VertexAttribDivisor(8, 1);
-        gl.EnableVertexAttribArray(8);
+        c.VertexAttribPointer(8, 4, c.FLOAT, c.FALSE, stride, @offsetOf(InstanceData, "uv_data"));
+        c.VertexAttribDivisor(8, 1);
+        c.EnableVertexAttribArray(8);
 
         // Unbind VAO
-        gl.BindVertexArray(0);
+        c.BindVertexArray(0);
 
-        gl.Enable(gl.BLEND);
-        gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        c.Enable(c.BLEND);
+        c.BlendFunc(c.SRC_ALPHA, c.ONE_MINUS_SRC_ALPHA);
 
         // Placeholder atlas texture
         var atlas_texture: c_uint = undefined;
-        gl.GenTextures(1, (&atlas_texture)[0..1]);
+        c.GenTextures(1, (&atlas_texture)[0..1]);
 
         // Check for OpenGL errors
-        if (gl.GetError() != gl.NO_ERROR) {
-            std.log.err("OpenGL error during Renderer2D.init: {d}", .{gl.GetError()});
+        if (c.GetError() != c.NO_ERROR) {
+            std.log.err("OpenGL error during Renderer2D.init: {d}", .{c.GetError()});
             return error.OpenGLError;
         }
 
@@ -277,44 +277,44 @@ pub const Renderer2D = struct {
         // delete cached textures
         var it = self.font_textures.iterator();
         while (it.next()) |entry| {
-            gl.DeleteTextures(1, (&entry.value_ptr.*)[0..1]);
+            c.DeleteTextures(1, (&entry.value_ptr.*)[0..1]);
         }
         self.font_textures.deinit();
-        self.shape_cache.deinit(&@import("font.zig").font_collection_geist);
-        gl.DeleteVertexArrays(1, (&self.vao)[0..1]);
-        gl.DeleteBuffers(1, (&self.vbo)[0..1]);
-        gl.DeleteBuffers(1, (&self.base_vbo)[0..1]);
-        gl.DeleteBuffers(1, (&self.base_ebo)[0..1]);
-        gl.DeleteTextures(1, (&self.atlas_texture)[0..1]);
+        self.shape_cache.deinit();
+        c.DeleteVertexArrays(1, (&self.vao)[0..1]);
+        c.DeleteBuffers(1, (&self.vbo)[0..1]);
+        c.DeleteBuffers(1, (&self.base_vbo)[0..1]);
+        c.DeleteBuffers(1, (&self.base_ebo)[0..1]);
+        c.DeleteTextures(1, (&self.atlas_texture)[0..1]);
     }
 
     pub fn begin(self: *Renderer2D, window_size: [2]u32, window_scale: [2]f32) void {
         self.rect_count = 0;
         // reset per-frame caches
         self.shape_cache.beginFrame();
-        gl.BindVertexArray(self.vao);
-        gl.UseProgram(self.program.id);
-        gl.Uniform4f(self.program.window_params_loc, @floatFromInt(window_size[0]), @floatFromInt(window_size[1]), window_scale[0], window_scale[1]);
-        gl.Uniform1i(self.program.tex_loc, 0);
-        gl.ActiveTexture(gl.TEXTURE0);
+        c.BindVertexArray(self.vao);
+        c.UseProgram(self.program.id);
+        c.Uniform4f(self.program.window_params_loc, @floatFromInt(window_size[0]), @floatFromInt(window_size[1]), window_scale[0], window_scale[1]);
+        c.Uniform1i(self.program.tex_loc, 0);
+        c.ActiveTexture(c.TEXTURE0);
 
-        if (gl.GetError() != gl.NO_ERROR) {
-            std.log.err("OpenGL error during Renderer2D.begin: {d}", .{gl.GetError()});
+        if (c.GetError() != c.NO_ERROR) {
+            std.log.err("OpenGL error during Renderer2D.begin: {d}", .{c.GetError()});
         }
     }
 
     pub fn flush(self: *Renderer2D) void {
         if (self.rect_count == 0) return;
         // std.log.debug("Flushing {d} rectangles", .{self.rect_count});
-        gl.BindVertexArray(self.vao);
-        gl.BindBuffer(gl.ARRAY_BUFFER, self.vbo);
-        gl.BufferSubData(gl.ARRAY_BUFFER, 0, @intCast(self.rect_count * @sizeOf(InstanceData)), &self.instance_data[0]);
-        gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, self.base_ebo);
-        gl.DrawElementsInstanced(gl.TRIANGLES, 6, gl.UNSIGNED_INT, 0, @intCast(self.rect_count));
+        c.BindVertexArray(self.vao);
+        c.BindBuffer(c.ARRAY_BUFFER, self.vbo);
+        c.BufferSubData(c.ARRAY_BUFFER, 0, @intCast(self.rect_count * @sizeOf(InstanceData)), &self.instance_data[0]);
+        c.BindBuffer(c.ELEMENT_ARRAY_BUFFER, self.base_ebo);
+        c.DrawElementsInstanced(c.TRIANGLES, 6, c.UNSIGNED_INT, 0, @intCast(self.rect_count));
         self.rect_count = 0;
 
-        if (gl.GetError() != gl.NO_ERROR) {
-            std.log.err("OpenGL error during Renderer2D.flush: {d}", .{gl.GetError()});
+        if (c.GetError() != c.NO_ERROR) {
+            std.log.err("OpenGL error during Renderer2D.flush: {d}", .{c.GetError()});
         }
     }
 
@@ -322,41 +322,41 @@ pub const Renderer2D = struct {
         const now = std.time.microTimestamp();
         defer std.debug.print("uploadAtlas took {d}us\n", .{std.time.microTimestamp() - now});
         // Make sure we target texture unit 0 because that's what the shader expects via Uniform1i(...)
-        gl.ActiveTexture(gl.TEXTURE0);
-        gl.BindTexture(gl.TEXTURE_2D, texture);
+        c.ActiveTexture(c.TEXTURE0);
+        c.BindTexture(c.TEXTURE_2D, texture);
 
         // Pixel alignment for single-channel data
-        gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1);
+        c.PixelStorei(c.UNPACK_ALIGNMENT, 1);
 
         // Upload: internal format RED, data format RED
-        gl.TexImage2D(
-            gl.TEXTURE_2D,
+        c.TexImage2D(
+            c.TEXTURE_2D,
             0,
-            gl.RED, // internal format
+            c.RED, // internal format
             @intCast(font_atlas.width),
             @intCast(font_atlas.height),
             0,
-            gl.RED, // source/pixel format
-            gl.UNSIGNED_BYTE,
+            c.RED, // source/pixel format
+            c.UNSIGNED_BYTE,
             font_atlas.pixel.ptr,
         );
 
         // Set sampling / wrapping
-        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_MIN_FILTER, c.LINEAR);
+        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_MAG_FILTER, c.LINEAR);
+        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_WRAP_S, c.CLAMP_TO_EDGE);
+        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_WRAP_T, c.CLAMP_TO_EDGE);
 
         // --- important: swizzle RED -> RGB, ALPHA -> 1
         // This makes sampling texture(tex, uv) return (r,r,r,1) for compatibility
         // on backends that do not auto-swizzle RED to vec4.
-        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_SWIZZLE_R, gl.RED);
-        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_SWIZZLE_G, gl.RED);
-        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_SWIZZLE_B, gl.RED);
-        gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_SWIZZLE_A, gl.ONE);
+        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_SWIZZLE_R, c.RED);
+        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_SWIZZLE_G, c.RED);
+        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_SWIZZLE_B, c.RED);
+        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_SWIZZLE_A, c.ONE);
 
-        const e = gl.GetError();
-        if (e != gl.NO_ERROR) {
+        const e = c.GetError();
+        if (e != c.NO_ERROR) {
             std.log.err("OpenGL error after uploadAtlas: {d}", .{e});
         }
     }
@@ -364,7 +364,7 @@ pub const Renderer2D = struct {
     fn getOrCreateAtlasTexture(self: *Renderer2D, font_atlas: FontAtlas, font_id: u64) c_uint {
         if (self.font_textures.get(font_id)) |tex| return tex;
         var tex: c_uint = undefined;
-        gl.GenTextures(1, (&tex)[0..1]);
+        c.GenTextures(1, (&tex)[0..1]);
         uploadAtlasToTexture(tex, font_atlas);
         self.font_textures.put(font_id, tex) catch |err| {
             std.log.err("Failed to cache font texture: {s}", .{@errorName(err)});
@@ -394,8 +394,8 @@ pub const Renderer2D = struct {
         if (self.current_texture_id == null or self.current_font_id == null or self.current_font_id.? != font.id) {
             self.flush();
             const tex = self.getOrCreateAtlasTexture(font.atlas, font.id);
-            gl.ActiveTexture(gl.TEXTURE0);
-            gl.BindTexture(gl.TEXTURE_2D, tex);
+            c.ActiveTexture(c.TEXTURE0);
+            c.BindTexture(c.TEXTURE_2D, tex);
             self.current_texture_id = tex;
             self.current_font_id = font.id;
         }
@@ -491,8 +491,8 @@ pub const Renderer2D = struct {
 };
 
 pub inline fn clipStart(rect: [4]f32) void {
-    gl.Enable(gl.SCISSOR_TEST);
-    gl.Scissor(
+    c.Enable(c.SCISSOR_TEST);
+    c.Scissor(
         @intFromFloat(rect[0]),
         @intFromFloat(rect[1]),
         @intFromFloat(rect[2]),
@@ -501,5 +501,5 @@ pub inline fn clipStart(rect: [4]f32) void {
 }
 
 pub inline fn clipEnd() void {
-    gl.Disable(gl.SCISSOR_TEST);
+    c.Disable(c.SCISSOR_TEST);
 }
