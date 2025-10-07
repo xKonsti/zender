@@ -373,11 +373,11 @@ pub const Renderer2D = struct {
     }
 
     pub inline fn drawRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, color: [4]u8) void {
-        drawRoundedBorderRect(self, x, y, w, h, 0.0, color, .{ 0, 0, 0, 0 }, color);
+        drawRoundedBorderRect(self, x, y, w, h, 0.0, color, .{0} ** 4, .{0} ** 4);
     }
 
     pub fn drawRoundedRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]u8) void {
-        drawRoundedBorderRect(self, x, y, w, h, r, color, .{0} ** 4, color);
+        drawRoundedBorderRect(self, x, y, w, h, r, color, .{0} ** 4, .{0} ** 4);
     }
 
     pub fn drawRoundedBorderRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]u8, border_width: [4]f32, border_color: [4]u8) void {

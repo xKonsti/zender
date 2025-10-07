@@ -17,7 +17,7 @@ pub fn main() !void {
     defer zen.core.deinit();
 
     while (!zen.core.shouldClose()) {
-        zen.core.startFrame();
+        zen.core.beginFrame();
 
         zen.layout.beginLayout();
         interface();
@@ -47,7 +47,7 @@ fn interface() void {
             .id = .from("left_panel"),
             .width = .fixed(200),
             .height = .full,
-            .bg_color = .light_300,
+            .bg_color = .withAlpha(.blue, 0.4),
             .border = .all(8, .dark_100),
             .padding = .all(8),
             .gap = 8,

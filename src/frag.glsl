@@ -4,7 +4,7 @@ flat in vec2 rect_center;
 flat in vec2 rect_size;
 flat in vec4 rect_color;
 flat in float corner_radius;
-flat in vec4 border_width;   // t,r,b,l
+flat in vec4 border_width; // t,r,b,l
 flat in vec4 border_color;
 flat in int v_use_texture;
 in vec2 v_uv;
@@ -12,7 +12,7 @@ in vec2 v_uv;
 out vec4 out_color;
 
 uniform vec4 window_params; // window_size.xy, window_scale.xy
-uniform sampler2D tex;     // Texture atlas (or white texture for solids)
+uniform sampler2D tex; // Texture atlas (or white texture for solids)
 
 // Signed distance to rounded rect (uniform radius, symmetric half-size)
 float RoundedRectSDF(vec2 p, vec2 center, vec2 half_size, float r) {
@@ -24,19 +24,19 @@ float RoundedRectSDF(vec2 p, vec2 center, vec2 half_size, float r) {
 // border = (top, right, bottom, left) in clockwise order.
 float RoundedRectInsetSDF(vec2 p, vec2 center, vec2 half_size, float r, vec4 border) {
     // Map into named variables for clarity
-    float top    = border.x;
-    float right  = border.y;
+    float top = border.x;
+    float right = border.y;
     float bottom = border.z;
-    float left   = border.w;
+    float left = border.w;
 
     // Compute new center shifted by asymmetric inset
     vec2 shift = vec2((left - right) * 0.5,
-                      (top - bottom) * 0.5);
+            (top - bottom) * 0.5);
     vec2 new_center = center + shift;
 
     // Shrink half-size according to both sides
     vec2 new_half = half_size - vec2((left + right) * 0.5,
-                                     (top + bottom) * 0.5);
+                (top + bottom) * 0.5);
 
     // Shrink radius by the *maximum* inset
     float new_r = max(0.0, r - max(max(left, right), max(top, bottom)));
@@ -48,7 +48,7 @@ void main() {
     vec2 sample_pos = gl_FragCoord.xy;
     vec2 half_size = rect_size * 0.5;
     // at max it should be half the size
-    float corner_radius_clamped =  min(corner_radius, min(half_size.x, half_size.y));
+    float corner_radius_clamped = min(corner_radius, min(half_size.x, half_size.y));
 
     // Base fill color (textured or solid)
     vec4 color = rect_color;
@@ -86,9 +86,9 @@ void main() {
     if (dist_outer > 0.0) discard;
 
     // Combine border and fill to avoid 1-pixel gaps
-    float alpha = clamp(alpha_fill + alpha_border, 0.0, 1.0);
+    float alpha = clamp(alpha_fill * rect_color.a + alpha_border * border_color.a, 0.0, 1.0);
     out_color = vec4(
             mix(color.rgb, border_color.rgb, alpha_border / alpha),
             alpha
-            );
+        );
 }

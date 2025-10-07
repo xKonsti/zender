@@ -35,6 +35,7 @@ pub const core = struct {
         // Set up input callbacks
         _ = glfw_mod.c.glfwSetKeyCallback(window.handle, keyCallback);
         _ = glfw_mod.c.glfwSetCharCallback(window.handle, charCallback);
+        _ = glfw_mod.c.glfwSetMouseButtonCallback(window.handle, mouseButtonCallback);
 
         glfw_mod.makeContextCurrent(window.handle);
         glfw_mod.swapInterval(1); // enable vsync
@@ -64,6 +65,7 @@ pub const core = struct {
     /// Should be called when shutting down
     pub fn deinit() void {
         font_mod.deinit();
+        deinitStandardCursors();
         glfw_mod.deinit();
         window.deinit();
         opengl_mod.c.makeProcTableCurrent(null);
@@ -82,7 +84,14 @@ pub const core = struct {
     }
 
     pub fn beginFrame() void {
+        // Clear input queues from previous frame first
+        char_input_queue_count = 0;
+        key_pressed_queue_count = 0;
+        mouse_button_pressed_queue_count = 0;
+
+        // Then poll events to fill the queues for this frame
         glfw_mod.pollEvents();
+
         opengl_mod.c.ClearColor(0.2, 0.3, 0.3, 1);
         opengl_mod.c.Clear(opengl_mod.c.COLOR_BUFFER_BIT);
     }
@@ -320,6 +329,11 @@ const MAX_KEY_QUEUE = 16;
 var key_pressed_queue: [MAX_KEY_QUEUE]c_int = [_]c_int{0} ** MAX_KEY_QUEUE;
 var key_pressed_queue_count: usize = 0;
 
+// Mouse button press queue for single-frame press events
+const MAX_MOUSE_QUEUE = 8;
+var mouse_button_pressed_queue: [MAX_MOUSE_QUEUE]c_int = [_]c_int{0} ** MAX_MOUSE_QUEUE;
+var mouse_button_pressed_queue_count: usize = 0;
+
 fn charCallback(win: ?*glfw_mod.c.GLFWwindow, codepoint: c_uint) callconv(.c) void {
     _ = win;
 
@@ -347,7 +361,66 @@ fn keyCallback(win: ?*glfw_mod.c.GLFWwindow, key: c_int, scancode: c_int, action
         }
     }
 }
+
+fn mouseButtonCallback(win: ?*glfw_mod.c.GLFWwindow, button: c_int, action: c_int, mods: c_int) callconv(.c) void {
+    _ = win;
+    _ = mods;
+
+    // Only queue on press event
+    if (action == glfw_mod.c.GLFW_PRESS and mouse_button_pressed_queue_count < MAX_MOUSE_QUEUE) {
+        mouse_button_pressed_queue[mouse_button_pressed_queue_count] = button;
+        mouse_button_pressed_queue_count += 1;
+    }
+}
+
+var standard_cursors: [8]?*glfw_mod.c.GLFWcursor = [_]?*glfw_mod.c.GLFWcursor{null} ** 8;
+var cursors_initialized: bool = false;
+
+fn initStandardCursors() void {
+    if (cursors_initialized) return;
+
+    const cursor_types = [_]c_int{
+        glfw_mod.c.GLFW_ARROW_CURSOR,
+        glfw_mod.c.GLFW_IBEAM_CURSOR,
+        glfw_mod.c.GLFW_CROSSHAIR_CURSOR,
+        glfw_mod.c.GLFW_HRESIZE_CURSOR,
+        glfw_mod.c.GLFW_VRESIZE_CURSOR,
+        glfw_mod.c.GLFW_RESIZE_ALL_CURSOR,
+        glfw_mod.c.GLFW_NOT_ALLOWED_CURSOR,
+        glfw_mod.c.GLFW_POINTING_HAND_CURSOR,
+    };
+
+    for (cursor_types, 0..) |cursor_type, i| {
+        standard_cursors[i] = glfw_mod.c.glfwCreateStandardCursor(cursor_type);
+    }
+
+    cursors_initialized = true;
+}
+
+fn deinitStandardCursors() void {
+    if (!cursors_initialized) return;
+
+    for (standard_cursors) |cursor| {
+        if (cursor) |c_cursor| {
+            glfw_mod.c.glfwDestroyCursor(c_cursor);
+        }
+    }
+
+    standard_cursors = [_]?*glfw_mod.c.GLFWcursor{null} ** 8;
+    cursors_initialized = false;
+}
+
 pub const io = struct {
+    pub const CursorIcon = enum(c_int) {
+        Arrow = glfw_mod.c.GLFW_ARROW_CURSOR,
+        IBeam = glfw_mod.c.GLFW_IBEAM_CURSOR,
+        Crosshair = glfw_mod.c.GLFW_CROSSHAIR_CURSOR,
+        HResize = glfw_mod.c.GLFW_HRESIZE_CURSOR,
+        VResize = glfw_mod.c.GLFW_VRESIZE_CURSOR,
+        ResizeAll = glfw_mod.c.GLFW_RESIZE_ALL_CURSOR,
+        NotAllowed = glfw_mod.c.GLFW_NOT_ALLOWED_CURSOR,
+        PointingHand = glfw_mod.c.GLFW_POINTING_HAND_CURSOR,
+    };
     pub const Key = enum(c_int) {
         // Letters (for key state polling)
         A = glfw_mod.c.GLFW_KEY_A,
@@ -479,6 +552,17 @@ pub const io = struct {
         return state == glfw_mod.c.GLFW_PRESS;
     }
 
+    /// Check if a mouse button was pressed this frame (single-frame event)
+    pub fn isMouseButtonPressed(button: MouseButton) bool {
+        const button_code = @intFromEnum(button);
+
+        for (mouse_button_pressed_queue[0..mouse_button_pressed_queue_count]) |pressed_button| {
+            if (pressed_button == button_code)
+                return true;
+        }
+        return false;
+    }
+
     /// Get the next Unicode character from input queue, returns null if empty
     pub fn getCharPressed() ?u21 {
         if (char_input_queue_count == 0) return null;
@@ -554,6 +638,31 @@ pub const io = struct {
         };
 
         return utf8_buffer[0..len];
+    }
+
+    /// Set the mouse cursor to a specific icon
+    pub fn setCursor(cursor_icon: CursorIcon) void {
+        initStandardCursors();
+
+        const cursor_index: usize = switch (cursor_icon) {
+            .Arrow => 0,
+            .IBeam => 1,
+            .Crosshair => 2,
+            .HResize => 3,
+            .VResize => 4,
+            .ResizeAll => 5,
+            .NotAllowed => 6,
+            .PointingHand => 7,
+        };
+
+        if (standard_cursors[cursor_index]) |cursor| {
+            glfw_mod.c.glfwSetCursor(window.handle, cursor);
+        }
+    }
+
+    /// Reset the mouse cursor to the default arrow cursor
+    pub fn setDefaultCursor() void {
+        glfw_mod.c.glfwSetCursor(window.handle, null);
     }
 };
 
