@@ -74,6 +74,8 @@ fn addDependencies(
     });
     mod.linkLibrary(glfw.artifact("glfw"));
 
+    mod.addIncludePath(b.path("lib"));
+
     const gl_bindings = @import("zigglgen").generateBindingsModule(b, .{
         .api = .gl,
         .version = .@"4.1",

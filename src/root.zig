@@ -3,6 +3,12 @@ const assert = std.debug.assert;
 
 const zlay = @import("zlayout");
 
+const rgfw = @cImport({
+    @cDefine("RGFW_IMPLEMENTATION", {});
+    @cDefine("RGFW_OPENGL", {});
+    @cInclude("RGFW.h");
+});
+
 const font_mod = @import("font.zig");
 const FontCollection = font_mod.FontCollection;
 const FontStyle = font_mod.FontStyle;
@@ -52,10 +58,10 @@ pub const core = struct {
         renderer2D = try .init(alloc, program);
         errdefer renderer2D.deinit();
 
-        zlay.configure(.{
+        zlay.init(.{
             .allocator = alloc,
             .measure_text = measureText,
-            .perf_info = false,
+            .print_perf = true,
         });
 
         try font_mod.init(alloc);
@@ -122,15 +128,14 @@ pub const layout = struct {
         const left_mouse_state = glfw_mod.c.glfwGetMouseButton(window.handle, glfw_mod.c.GLFW_MOUSE_BUTTON_LEFT);
         const scroll = window.takeMouseScrollDelta();
         zlay.startLayout(.{
+            .pos = .{ @floatCast(mouse_pos[0]), @floatCast(mouse_pos[1]) },
             .is_down = left_mouse_state == glfw_mod.c.GLFW_PRESS,
-            .x = @floatCast(mouse_pos[0]),
-            .y = @floatCast(mouse_pos[1]),
         }, .{
-            .delta = .{ .x = @floatCast(scroll[0]), .y = @floatCast(scroll[1]) },
+            .delta = .{ @floatCast(scroll[0]), @floatCast(scroll[1]) },
             .delta_time = @floatCast(delta_time),
         }, .{
-            .w = @floatFromInt(window_size[0]),
-            .h = @floatFromInt(window_size[1]),
+            @floatFromInt(window_size[0]),
+            @floatFromInt(window_size[1]),
         });
     }
 
@@ -175,10 +180,10 @@ pub const drawing = struct {
                 .clipStart => |clip| {
                     renderer2D.flush();
                     const rect: [4]f32 = .{
-                        clip.rect.x * scale[0],
-                        clip.rect.y * scale[1],
-                        clip.rect.width * scale[0],
-                        clip.rect.height * scale[1],
+                        clip.rect[0] * scale[0],
+                        clip.rect[1] * scale[1],
+                        clip.rect[2] * scale[0],
+                        clip.rect[3] * scale[1],
                     };
                     // _ = rect;
                     opengl_mod.clipStart(rect);
@@ -216,11 +221,11 @@ pub const drawing = struct {
                         else
                             .{0} ** 4;
                     renderer2D.drawRoundedBorderRect(
-                        rect.x,
-                        rect.y,
-                        rect.width,
-                        rect.height,
-                        @floatFromInt(rect_cmd.corner_radius.top_left),
+                        rect[0],
+                        rect[1],
+                        rect[2],
+                        rect[3],
+                        @floatFromInt(rect_cmd.corner_radius.tl),
                         color,
                         border_widths,
                         border_color,
@@ -249,8 +254,8 @@ pub const drawing = struct {
                     renderer2D.drawText(
                         font_mod.font_collection_geist,
                         text,
-                        rect.x,
-                        rect.y,
+                        rect[0],
+                        rect[1],
                         @floatFromInt(text_config.font_size),
                         style,
                         text_color,
@@ -669,7 +674,7 @@ pub const io = struct {
 // =============================================================================
 // MISC & NO PROPER PLACE FOUND YET
 // =============================================================================
-fn measureText(text: []const u8, config: zlay.TextProps) zlay.Dimensions {
+fn measureText(text: []const u8, config: zlay.TextProps) zlay.Pair {
     // Pick font by size and style
     const style: font_mod.FontStyle = switch (config.font_style) {
         .light => .light,
@@ -682,7 +687,7 @@ fn measureText(text: []const u8, config: zlay.TextProps) zlay.Dimensions {
     const size: f32 = @floatFromInt(config.font_size);
     if (config.font_id != 0) {
         std.log.warn("font_id != 0 not supported", .{});
-        return zlay.Dimensions{ .w = 0, .h = 0 };
+        return zlay.Pair{ 0, 0 };
     }
     const font_obj = font_mod.font_collection_geist.getFont(size, style);
 
@@ -696,7 +701,7 @@ fn measureText(text: []const u8, config: zlay.TextProps) zlay.Dimensions {
     // Shape text using HarfBuzz
     const glyphs = renderer2D.shape_cache.get(font_obj, text) catch |err| {
         std.log.err("Shape text failed: {s}", .{@errorName(err)});
-        return zlay.Dimensions{ .w = 0, .h = 0 };
+        return zlay.Pair{ 0, 0 };
     };
     // owned by per-frame cache; no defer free here
 
@@ -730,8 +735,5 @@ fn measureText(text: []const u8, config: zlay.TextProps) zlay.Dimensions {
     // Optional letter spacing
     const final_width = max_line_width + @as(f32, @floatFromInt((text.len - 1 * @as(usize, @intCast(config.letter_spacing)))));
 
-    return zlay.Dimensions{
-        .w = final_width,
-        .h = total_height,
-    };
+    return .{ final_width, total_height };
 }

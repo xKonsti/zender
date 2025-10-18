@@ -34,25 +34,27 @@ pub fn main() !void {
 fn interface() void {
     if (zlay.open(.{
         .id = .from("root"),
-        .width = .full,
-        .height = .full,
+        .sizing = .{ .full, .full },
         .bg_color = .red,
         .padding = .all(8),
-        .gap = 8,
-        .alignment = .center_left,
+        .layout = .flex(.{
+            .gap = 8,
+            .alignment = .center_left,
+        }),
     })) {
         defer zlay.close();
 
         if (zlay.open(.{
             .id = .from("left_panel"),
-            .width = .fixed(200),
-            .height = .full,
+            .sizing = .{ .fixed(200), .full },
             .bg_color = .withAlpha(.blue, 0.4),
             .border = .all(8, .dark_100),
             .padding = .all(8),
-            .gap = 8,
-            .direction = .y,
-            .alignment = .top_center,
+            .layout = .flex(.{
+                .gap = 8,
+                .direction = .y,
+                .alignment = .top_center,
+            }),
             .corner_radius = .all(12),
         })) {
             defer zlay.close();
@@ -70,7 +72,7 @@ fn interface() void {
                 .font_size = 18,
                 .text_color = .dark_300,
                 .font_style = .bold,
-                .width = .full,
+                .sizing = .{ .full, .default },
             });
 
             if (hov and zen.io.isMouseButtonDown(.RIGHT)) {
@@ -79,14 +81,13 @@ fn interface() void {
                     .font_size = 18,
                     .text_color = .dark_300,
                     .font_style = .bold,
-                    .width = .full,
+                    .sizing = .{ .full, .default },
                 });
 
                 // TODO: Why does this hover case the next panel to change background color from transparent to light_200?
 
                 if (zlay.open(.{
-                    .width = .full,
-                    .height = .fixed(50),
+                    .sizing = .{ .full, .fixed(50) },
                     .corner_radius = .all(4),
                     .bg_color = .dark_300,
                 })) {
@@ -99,7 +100,7 @@ fn interface() void {
                         .font_size = 16,
                         .font_style = .medium,
                         .text_color = .dark_300,
-                        .width = .full,
+                        .sizing = .{ .full, .default },
                     },
                 );
             }
@@ -107,25 +108,28 @@ fn interface() void {
 
         if (zlay.open(.{
             .id = .from("next_panel"),
-            .width = .fixed(400),
-            .height = .percent(0.5),
+            .sizing = .{ .fixed(600), .percent(0.5) },
             .bg_color = .light_200,
-            .scroll = .{ .y = true, .x = true },
+            .scroll = .{ .y = true },
             .padding = .all(16),
             .corner_radius = .all(40),
             .border = .all(8, .withAlpha(.dark_100, 1.0)),
-            .gap = 4,
-            .direction = .x,
+            .layout = .flex(.{
+                .gap = 4,
+                .direction = .x,
+            }),
         })) {
             defer zlay.close();
 
             if (zlay.open(.{
-                .gap = 8,
-                .direction = .y,
+                .layout = .flex(.{
+                    .gap = 8,
+                    .direction = .y,
+                }),
             })) {
                 defer zlay.close();
 
-                for (0..2000) |i| {
+                for (0..20) |i| {
                     // if (zlay.open(.{
                     //     .id = .from(i),
                     //     .bg_color = .orange,
@@ -140,8 +144,7 @@ fn interface() void {
                     // }
                     if (zlay.open(.{
                         .id = .from(i),
-                        .width = .fixed(32),
-                        .height = .fixed(32),
+                        .sizing = .{ .fixed(32), .fixed(32) },
                         .bg_color = .orange,
                         .corner_radius = .all(4),
                     })) {
@@ -151,12 +154,12 @@ fn interface() void {
             }
 
             zlay.text(
-                "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit" ** 20,
+                "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit." ** 20,
                 .{
                     .font_size = 16,
                     .font_style = .medium,
                     .text_color = .dark_300,
-                    .width = .grow,
+                    .sizing = .{ .grow, .default },
                 },
             );
         }

@@ -87,8 +87,10 @@ void main() {
 
     // Combine border and fill to avoid 1-pixel gaps
     float alpha = clamp(alpha_fill * rect_color.a + alpha_border * border_color.a, 0.0, 1.0);
+
+    float mix_factor = (alpha > 0.0) ? (alpha_border / alpha) : 0.0;
     out_color = vec4(
-            mix(color.rgb, border_color.rgb, alpha_border / alpha),
+            mix(color.rgb, border_color.rgb, mix_factor),
             alpha
         );
 }
