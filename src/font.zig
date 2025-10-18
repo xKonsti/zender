@@ -66,6 +66,9 @@ pub const ShapedGlyph = struct {
     y_offset: f32,
     /// maps to byte index in the original text
     cluster: u32,
+
+    bearing_x: f32, // horizontal left-breaing in pixel units
+    glyph_width: f32, // glyph bounding width in pixel units
 };
 
 pub const Font = struct {
@@ -156,6 +159,11 @@ pub const Font = struct {
         for (0..glyph_count) |i| {
             const info = glyph_infos[i];
             const pos = glyph_positions[i];
+            _ = ft.FT_Load_Glyph(self.ft_face, @intCast(info.codepoint), ft.FT_LOAD_DEFAULT);
+
+            const m = self.ft_face.*.glyph.*.metrics;
+            const bearing_x_raw = @as(f32, @floatFromInt(m.horiBearingX)) / 64.0;
+            const glyph_width_raw = @as(f32, @floatFromInt(m.width)) / 64.0;
 
             shaped_glyphs[i] = .{
                 .glyph_index = info.codepoint,
@@ -164,6 +172,9 @@ pub const Font = struct {
                 .x_offset = @as(f32, @floatFromInt(pos.x_offset)) / 64.0,
                 .y_offset = @as(f32, @floatFromInt(pos.y_offset)) / 64.0,
                 .cluster = info.cluster,
+
+                .bearing_x = bearing_x_raw,
+                .glyph_width = glyph_width_raw,
             };
         }
         return shaped_glyphs;

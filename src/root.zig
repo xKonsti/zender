@@ -675,6 +675,8 @@ pub const io = struct {
 // MISC & NO PROPER PLACE FOUND YET
 // =============================================================================
 fn measureText(text: []const u8, config: zlay.TextProps) zlay.Pair {
+    if (text.len == 0) return zlay.Pair{ 0, 0 };
+
     // Pick font by size and style
     const style: font_mod.FontStyle = switch (config.font_style) {
         .light => .light,
@@ -695,7 +697,6 @@ fn measureText(text: []const u8, config: zlay.TextProps) zlay.Pair {
     const scale = size / font_obj.pixel_height;
 
     // Get line metrics from FreeType (in 26.6 fixed-point)
-    // const ascender_px = @as(f32, @floatFromInt(font_obj.ft_face.*.size.*.metrics.ascender)) / 64.0;
     const line_advance_px = @as(f32, @floatFromInt(font_obj.ft_face.*.size.*.metrics.height)) / 64.0;
 
     // Shape text using HarfBuzz
@@ -703,37 +704,45 @@ fn measureText(text: []const u8, config: zlay.TextProps) zlay.Pair {
         std.log.err("Shape text failed: {s}", .{@errorName(err)});
         return zlay.Pair{ 0, 0 };
     };
-    // owned by per-frame cache; no defer free here
 
     var cursor_x: f32 = 0.0;
-    var cursor_y: f32 = 0.0;
     var max_line_width: f32 = 0.0;
     var line_count: usize = 1;
+    var glyph_count_in_line: usize = 0;
 
+    const letter_spacing_px: f32 = @as(f32, @floatFromInt(config.letter_spacing)) * scale;
+
+    // Process each shaped glyph
     for (glyphs) |g| {
-        // Newline handling
+        // Check for newline
         if (g.cluster < text.len and text[g.cluster] == '\n') {
-            if (cursor_x > max_line_width) max_line_width = cursor_x;
+            // Record this line's width before resetting
+            if (cursor_x > max_line_width) {
+                max_line_width = cursor_x;
+            }
             cursor_x = 0.0;
-            cursor_y += line_advance_px * scale;
             line_count += 1;
+            glyph_count_in_line = 0;
             continue;
         }
 
-        // Advance pen (HarfBuzz advances are already in pixels)
+        // Add letter spacing before this glyph (except for first glyph in line)
+        if (glyph_count_in_line > 0) {
+            cursor_x += letter_spacing_px;
+        }
+
+        // Advance cursor by this glyph's advance
         cursor_x += g.x_advance * scale;
-        cursor_y += g.y_advance * scale;
+        glyph_count_in_line += 1;
     }
 
-    // Last line width
-    if (cursor_x > max_line_width)
+    // Don't forget the last line
+    if (cursor_x > max_line_width) {
         max_line_width = cursor_x;
+    }
 
-    // Height: line_count * line_advance_px
-    const total_height = @as(f32, @floatFromInt(line_count)) * line_advance_px * scale;
+    // Calculate total height
+    const total_height: f32 = @as(f32, @floatFromInt(line_count)) * line_advance_px * scale;
 
-    // Optional letter spacing
-    const final_width = max_line_width + @as(f32, @floatFromInt((text.len - 1 * @as(usize, @intCast(config.letter_spacing)))));
-
-    return .{ final_width, total_height };
+    return .{ @ceil(max_line_width), @ceil(total_height) };
 }
