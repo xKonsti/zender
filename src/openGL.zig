@@ -1,7 +1,9 @@
 const std = @import("std");
 const assert = std.debug.assert;
+const Allocator = std.mem.Allocator;
 
 pub const c = @import("gl");
+const stb_image = @import("image.zig").c;
 
 const Font = @import("font.zig").Font;
 const FontAtlas = @import("font.zig").FontAtlas;
@@ -143,7 +145,7 @@ const InstanceData = struct {
     corner_radius: f32, // unscaled
     border_width: [4]f32, // unscaled t,r,b,l
     border_color: [4]u8, // RGBA 0-255
-    use_texture: c_int, // 0 = solid, 1 = textured
+    use_texture: enum(c_int) { solid = 0, text = 1, image = 2 }, // 0 = solid, 1 = text (grayscale), 2 = image (RGBA)
     uv_data: [4]f32, // for text/images, UV data (x, y, width, height)
 
     fn fromRect(x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]u8, border_width: [4]f32, border_color: [4]u8) InstanceData {
@@ -154,7 +156,7 @@ const InstanceData = struct {
             .corner_radius = r,
             .border_width = border_width,
             .border_color = border_color,
-            .use_texture = 0,
+            .use_texture = .solid,
             .uv_data = .{ 0, 0, 0, 0 },
         };
     }
@@ -176,6 +178,9 @@ pub const Renderer2D = struct {
     allocator: std.mem.Allocator,
     font_textures: std.AutoHashMap(u64, c_uint), // font.id -> texture id
     shape_cache: ShapeCache,
+
+    image_textures: std.StringHashMap(ImageTexture), // path -> texture
+    current_image_id: ?c_uint,
 
     pub fn init(allocator: std.mem.Allocator, program: Program) !Renderer2D {
         var vao: c_uint = undefined;
@@ -270,6 +275,9 @@ pub const Renderer2D = struct {
             .allocator = allocator,
             .font_textures = .init(allocator),
             .shape_cache = .init(allocator),
+
+            .image_textures = .init(allocator),
+            .current_image_id = null,
         };
     }
 
@@ -286,6 +294,12 @@ pub const Renderer2D = struct {
         c.DeleteBuffers(1, (&self.base_vbo)[0..1]);
         c.DeleteBuffers(1, (&self.base_ebo)[0..1]);
         c.DeleteTextures(1, (&self.atlas_texture)[0..1]);
+
+        var img_it = self.image_textures.iterator();
+        while (img_it.next()) |entry| {
+            entry.value_ptr.*.deinit();
+        }
+        self.image_textures.deinit();
     }
 
     pub fn begin(self: *Renderer2D, window_size: [2]u32, window_scale: [2]f32) void {
@@ -398,6 +412,7 @@ pub const Renderer2D = struct {
             c.BindTexture(c.TEXTURE_2D, tex);
             self.current_texture_id = tex;
             self.current_font_id = font.id;
+            self.current_image_id = null;
         }
 
         const glyphs = try self.shape_cache.get(font, text);
@@ -469,7 +484,7 @@ pub const Renderer2D = struct {
                 .corner_radius = 0,
                 .border_width = .{0} ** 4,
                 .border_color = .{0} ** 4,
-                .use_texture = 1,
+                .use_texture = .text,
                 .uv_data = .{
                     @as(f32, @floatFromInt(rect.x)) / @as(f32, @floatFromInt(font.atlas.width)),
                     @as(f32, @floatFromInt(rect.y)) / @as(f32, @floatFromInt(font.atlas.height)),
@@ -485,13 +500,73 @@ pub const Renderer2D = struct {
         }
     }
 
+    pub fn drawImage(
+        self: *Renderer2D,
+        image: ImageTexture,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        tint: [4]u8, // white = no tint: .{255, 255, 255, 255}
+    ) void {
+        // Flush if we're switching textures
+        if (self.current_image_id == null or self.current_image_id.? != image.id) {
+            self.flush();
+            c.ActiveTexture(c.TEXTURE0);
+            c.BindTexture(c.TEXTURE_2D, image.id);
+            self.current_image_id = image.id;
+            self.current_font_id = null; // invalidate font cache
+            self.current_texture_id = null;
+        }
+
+        if (self.rect_count >= MAX_RECTANGLES) self.flush();
+
+        self.instance_data[self.rect_count] = .{
+            .pos_tl = .{ x, y },
+            .size = .{ w, h },
+            .color = tint,
+            .corner_radius = 0,
+            .border_width = .{0} ** 4,
+            .border_color = .{0} ** 4,
+            .use_texture = .image,
+            .uv_data = .{ 0.0, 0.0, 1.0, 1.0 }, // full texture
+        };
+        self.rect_count += 1;
+    }
+
     pub fn end(self: *Renderer2D) void {
         self.flush();
+    }
+
+    pub fn loadImage(self: *Renderer2D, path: []const u8) !ImageTexture {
+        if (self.image_textures.get(path)) |cached| {
+            return cached;
+        }
+
+        const image = try ImageTexture.loadFromPath(self.allocator, path);
+        const path_owned = try self.allocator.dupe(u8, path);
+        try self.image_textures.put(path_owned, image);
+
+        return image;
+    }
+
+    // For embedded data, add this too:
+    pub fn loadImageFromMemory(self: *Renderer2D, id: []const u8, data: []const u8) !ImageTexture {
+        if (self.image_textures.get(id)) |cached| {
+            return cached;
+        }
+
+        const image = try ImageTexture.loadFromMemory(data);
+        const id_owned = try self.allocator.dupe(u8, id);
+        try self.image_textures.put(id_owned, image);
+
+        return image;
     }
 };
 
 pub inline fn clipStart(rect: [4]f32) void {
     c.Enable(c.SCISSOR_TEST);
+
     c.Scissor(
         @intFromFloat(rect[0]),
         @intFromFloat(rect[1]),
@@ -503,3 +578,97 @@ pub inline fn clipStart(rect: [4]f32) void {
 pub inline fn clipEnd() void {
     c.Disable(c.SCISSOR_TEST);
 }
+
+// IMAGE
+pub const ImageTexture = struct {
+    id: c_uint,
+    width: u32,
+    height: u32,
+
+    pub fn loadFromPath(allocator: Allocator, path: []const u8) !ImageTexture {
+        const path_z = try allocator.dupeZ(u8, path);
+        defer allocator.free(path_z);
+
+        var width: c_int = undefined;
+        var height: c_int = undefined;
+        var channels: c_int = undefined;
+
+        const data = stb_image.stbi_load(
+            path_z.ptr,
+            &width,
+            &height,
+            &channels,
+            4, // force RGBA
+        ) orelse {
+            std.log.err("Failed to load image from path: {s}", .{path});
+            return error.ImageLoadFailed;
+        };
+        defer stb_image.stbi_image_free(data);
+
+        return uploadToGPU(data, @intCast(width), @intCast(height));
+    }
+
+    pub fn loadFromMemory(comptime image_data: []const u8) !ImageTexture {
+        var width: c_int = undefined;
+        var height: c_int = undefined;
+        var channels: c_int = undefined;
+
+        const data = stb_image.stbi_load_from_memory(
+            image_data.ptr,
+            @intCast(image_data.len),
+            &width,
+            &height,
+            &channels,
+            4, // force RGBA
+        ) orelse {
+            std.log.err("Failed to load image from memory", .{});
+            return error.ImageLoadFailed;
+        };
+        defer stb_image.stbi_image_free(data);
+
+        return uploadToGPU(data, @intCast(width), @intCast(height));
+    }
+
+    fn uploadToGPU(data: [*c]u8, width: u32, height: u32) !ImageTexture {
+        var tex_id: c_uint = undefined;
+        c.GenTextures(1, (&tex_id)[0..1]);
+        c.ActiveTexture(c.TEXTURE0);
+        c.BindTexture(c.TEXTURE_2D, tex_id);
+
+        c.TexImage2D(
+            c.TEXTURE_2D,
+            0,
+            c.RGBA,
+            @intCast(width),
+            @intCast(height),
+            0,
+            c.RGBA,
+            c.UNSIGNED_BYTE,
+            data,
+        );
+
+        // Set texture parameters
+        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_MIN_FILTER, c.NEAREST);
+        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_MAG_FILTER, c.NEAREST);
+
+        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_WRAP_S, c.CLAMP_TO_EDGE);
+        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_WRAP_T, c.CLAMP_TO_EDGE);
+
+        const err = c.GetError();
+        if (err != c.NO_ERROR) {
+            std.log.err("OpenGL error during texture upload: {d}", .{err});
+            c.DeleteTextures(1, (&tex_id)[0..1]);
+            return error.OpenGLTextureUploadFailed;
+        }
+
+        return ImageTexture{
+            .id = tex_id,
+            .width = width,
+            .height = height,
+        };
+    }
+
+    pub fn deinit(self: *ImageTexture) void {
+        c.DeleteTextures(1, (&self.id)[0..1]);
+    }
+};

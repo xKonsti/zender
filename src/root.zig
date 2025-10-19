@@ -152,6 +152,7 @@ pub const layout = struct {
     pub const open = zlay.open;
     pub const close = zlay.close;
     pub const text = zlay.text;
+    pub const image = zlay.image;
     pub const hovered = zlay.hovered;
 };
 
@@ -179,9 +180,11 @@ pub const drawing = struct {
             switch (cmd) {
                 .clipStart => |clip| {
                     renderer2D.flush();
+
+                    const bottom_left_y = @as(f32, @floatFromInt(window.windowSize()[1])) - clip.rect[3] - clip.rect[1];
                     const rect: [4]f32 = .{
                         clip.rect[0] * scale[0],
-                        clip.rect[1] * scale[1],
+                        bottom_left_y * scale[1],
                         clip.rect[2] * scale[0],
                         clip.rect[3] * scale[1],
                     };
@@ -263,8 +266,23 @@ pub const drawing = struct {
                         std.log.err("Failed to draw text: {s}", .{@errorName(err)});
                     };
                 },
-                .drawImage => |_| {
-                    @panic("TODO");
+                .drawImage => |img_cmd| {
+                    const image: *const anyopaque = img_cmd.data;
+                    // const dims: [2]f32 = img_cmd.dimensions;
+                    const rect: [4]f32 = img_cmd.rect_on_screen;
+
+                    // Cast the opaque pointer back to ImageTexture
+                    const image_texture: *const opengl_mod.ImageTexture = @ptrCast(@alignCast(image));
+
+                    // Call drawImage with the rect coordinates
+                    renderer2D.drawImage(
+                        image_texture.*,
+                        rect[0], // x
+                        rect[1], // y
+                        rect[2], // width
+                        rect[3], // height
+                        .{ 255, 255, 255, 255 }, // white tint (no color change)
+                    );
                 },
             }
         }
@@ -319,7 +337,19 @@ pub const drawing = struct {
             std.log.err("Failed to draw text: {}", .{err});
         };
     }
+
+    pub fn drawImage(
+        image: Image,
+        rect: zlay.Rect,
+    ) void {
+        renderer2D.drawImage(image, rect.x, rect.y, rect.w, rect.h, .{ 255, 255, 255, 255 });
+    }
 };
+
+// =============================================================================
+// Image
+// =============================================================================
+pub const Image = opengl_mod.ImageTexture;
 
 // =============================================================================
 // IO (i.e. Keyboard, Mouse, ...)

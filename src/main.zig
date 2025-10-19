@@ -16,6 +16,8 @@ pub fn main() !void {
     try zen.core.init(allocator, .{ 1200, 800 }, "Zender Test");
     defer zen.core.deinit();
 
+    calculator_icon = zen.drawing.Image.loadFromMemory(@embedFile("resources/calculator.png")) catch unreachable;
+
     while (!zen.core.shouldClose()) {
         zen.core.beginFrame();
 
@@ -31,6 +33,9 @@ pub fn main() !void {
     }
 }
 
+var calculator_icon: zen.drawing.Image = undefined;
+// zen.drawing.Image.loadFromMemory(@embedFile("resources/calculator.png"));
+
 fn interface() void {
     if (zlay.open(.{
         .id = .from("root"),
@@ -43,6 +48,16 @@ fn interface() void {
         }),
     })) {
         defer zlay.close();
+
+        if (zlay.open(.{})) {
+            defer zlay.close();
+
+            zlay.image(@ptrCast(@alignCast(&calculator_icon)), .{
+                .src_dimensions = .{ 200, 200 },
+                .id = .from(@src()),
+                .sizing = .{ .fixed(48), .fixed(48) },
+            });
+        }
 
         if (zlay.open(.{
             .id = .from("left_panel"),
@@ -93,16 +108,16 @@ fn interface() void {
                 })) {
                     defer zlay.close();
                 }
-                zlay.text(
-                    "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit",
-                    .{
-                        .id = .from(@src()),
-                        .font_size = 16,
-                        .font_style = .medium,
-                        .text_color = .dark_300,
-                        .sizing = .{ .full, .default },
-                    },
-                );
+                // zlay.text(
+                //     "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit",
+                //     .{
+                //         .id = .from(@src()),
+                //         .font_size = 16,
+                //         .font_style = .medium,
+                //         .text_color = .dark_300,
+                //         .sizing = .{ .full, .default },
+                //     },
+                // );
             }
         }
 
@@ -153,15 +168,15 @@ fn interface() void {
                 }
             }
 
-            zlay.text(
-                "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit." ** 20,
-                .{
-                    .font_size = 16,
-                    .font_style = .medium,
-                    .text_color = .dark_300,
-                    .sizing = .{ .grow, .default },
-                },
-            );
+            // zlay.text(
+            //     "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit." ** 20,
+            //     .{
+            //         .font_size = 16,
+            //         .font_style = .medium,
+            //         .text_color = .dark_300,
+            //         .sizing = .{ .grow, .default },
+            //     },
+            // );
         }
     }
 }

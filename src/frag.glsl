@@ -59,6 +59,14 @@ void main() {
         return;
     }
 
+        // Image rendering (full RGBA)
+    if (v_use_texture == 2) {
+        vec4 tex_color = texture(tex, v_uv);
+        // Apply tint color
+        out_color = tex_color * color;
+        return;
+    }
+
     if (rect_color.a == 0.0) {
         out_color = color;
         return;
