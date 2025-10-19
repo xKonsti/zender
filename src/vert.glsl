@@ -5,9 +5,9 @@ layout(location = 1) in vec2 inst_tl;              // Instance top-left (unscale
 layout(location = 2) in vec2 inst_size;             // Instance size (unscaled)
 layout(location = 3) in vec4 inst_color;            // Instance color
 layout(location = 4) in float inst_corner_radius;   // Instance corner radius
-layout(location = 5) in vec4 inst_border_width;    // Instance border width (t,r,b,l)
+layout(location = 5) in vec4 inst_border_width;    // Instance border width (l, r, t, b)
 layout(location = 6) in vec4 inst_border_color;     // Instance border color
-layout(location = 7) in int use_texture;            // 0 = solid, 1 = textured
+layout(location = 7) in int use_texture;            // 0 = solid, 1 = text, 2 = image
 layout(location = 8) in vec4 uv_data;               // UV data for atlas (x, y, width, height)
 
 flat out vec2 rect_center;

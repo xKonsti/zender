@@ -219,6 +219,7 @@ pub const drawing = struct {
                             }
                         else
                             .{0} ** 4;
+
                     const border_color: [4]u8 =
                         if (rect_cmd.border) |border|
                             .{
@@ -229,6 +230,11 @@ pub const drawing = struct {
                             }
                         else
                             .{0} ** 4;
+                    // if (border_widths[3] == 4) {
+                    //     std.log.err("border_widths[3] == 4", .{});
+                    //     std.log.err("The width is {d} {d} {d} {d}", .{ border_widths[0], border_widths[1], border_widths[2], border_widths[3] });
+                    //     std.log.err("And the color is {d} {d} {d} {d}", .{ border_color[0], border_color[1], border_color[2], border_color[3] });
+                    // }
                     renderer2D.drawRoundedBorderRect(
                         rect[0],
                         rect[1],

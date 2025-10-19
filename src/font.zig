@@ -38,7 +38,6 @@ pub fn init(allocator: std.mem.Allocator) !void {
 
 pub fn deinit() void {
     _ = ft.FT_Done_FreeType(freetype_lib);
-
     font_collection_geist.deinit();
 }
 /// Represents a rendered glyph bitmap (8-bit grayscale).
@@ -88,7 +87,6 @@ pub const Font = struct {
         hasher.update(std.mem.asBytes(&pixel_height));
         hasher.update(font_data);
 
-        var font: Font = undefined;
         var face: ft.FT_Face = undefined;
         const face_error = ft.FT_New_Memory_Face(
             freetype_lib,
@@ -98,22 +96,26 @@ pub const Font = struct {
             &face,
         );
         if (face_error != ft.FT_Err_Ok) {
-            std.log.err("FreeType new memory face failed: {s}", .{ft.FT_Error_String(face_error)});
+            std.log.err("FreeType new memory face failed: {d}", .{face_error});
             return error.FreeTypeNewMemoryFaceFailed;
         }
-        errdefer assert(ft.FT_Done_Face(face) == ft.FT_Err_Ok);
+        errdefer _ = ft.FT_Done_Face(face);
+
+        if (face == null) {
+            return error.FreeTypeFaceNull;
+        }
 
         const set_size_error = ft.FT_Set_Pixel_Sizes(face, 0, @as(ft.FT_UInt, @intFromFloat(pixel_height)));
         if (set_size_error != ft.FT_Err_Ok) {
-            std.log.err("FreeType set pixel sizes failed: {s}", .{ft.FT_Error_String(set_size_error)});
+            std.log.err("FreeType set pixel sizes failed: {d}", .{set_size_error});
             return error.FreeTypeSetPixelSizesFailed;
         }
 
         const harfb_font = harfb.hb_ft_font_create(@ptrCast(face), null) orelse
             return error.HarfBuzzFontCreateFailed;
+        errdefer harfb.hb_font_destroy(harfb_font);
 
-        // TODO: this block below is really cringe
-        font = .{
+        var font: Font = .{
             .id = hasher.final(),
             .alloc = allocator,
             .ft_face = face,
@@ -122,18 +124,24 @@ pub const Font = struct {
             .atlas = undefined,
             .units_per_em = face.*.units_per_EM,
         };
+
         const atlas = try FontAtlas.init(allocator, font);
         font.atlas = atlas;
         return font;
     }
 
     pub fn deinit(self: *Font) void {
-        //TODO: find out why FT_Done_Face fails
-        if (ft.FT_Done_Face(self.ft_face) != ft.FT_Err_Ok) {
-            std.log.err("Failed to deinitialize font face", .{});
-        }
+        // 1. Destroy HarfBuzz font FIRST (it references ft_face internally)
         harfb.hb_font_destroy(self.harfb_font);
+
+        // 2. Deinit atlas (doesn't depend on ft_face anymore)
         self.atlas.deinit();
+
+        // 3. Finally destroy FreeType face
+        const result = ft.FT_Done_Face(self.ft_face);
+        if (result != ft.FT_Err_Ok) {
+            std.log.err("Failed to deinitialize font face: error code {d}", .{result});
+        }
     }
 
     pub fn shapeText(self: Font, text: []const u8) ![]ShapedGlyph {
@@ -187,7 +195,7 @@ pub const Font = struct {
     /// Rasterizes a glyph by index to an 8-bit grayscale bitmap.
     /// The caller owns the returned bitmap and must call `deinit` on it.
     pub fn rasterizeGlyph(self: Font, glyph_index: usize) !GlyphBitmap {
-        const face = self.ft_face.?;
+        const face = self.ft_face;
 
         const error_code = ft.FT_Load_Glyph(
             face,
@@ -195,16 +203,18 @@ pub const Font = struct {
             ft.FT_LOAD_DEFAULT | ft.FT_LOAD_RENDER,
         );
         if (error_code != ft.FT_Err_Ok) {
-            return error.FreeTypeNewMemoryFaceFailed;
+            return error.FreeTypeLoadGlyphFailed; // Better error name
         }
 
         const bitmap = &face.*.glyph.*.bitmap;
 
         const pixels_size = @as(usize, @intCast(@as(c_int, @intCast(bitmap.rows)) * bitmap.pitch));
         const pixels = try self.alloc.alloc(u8, pixels_size);
-        errdefer self.allocator.free(pixels);
+        errdefer self.alloc.free(pixels); // ✅ Fixed: was self.allocator.free
 
-        @memcpy(pixels, bitmap.buffer);
+        if (pixels_size > 0) { // ✅ Guard against empty bitmaps
+            @memcpy(pixels, bitmap.buffer[0..pixels_size]);
+        }
 
         return GlyphBitmap{
             .alloc = self.alloc,
@@ -364,6 +374,7 @@ pub const FontAtlas = struct {
 
     pub fn deinit(self: *FontAtlas) void {
         self.alloc.free(self.pixel);
+        self.glyphs_map.deinit();
     }
 
     pub fn getGlyphDimensions(self: FontAtlas, glyph_index: u32) Rect {

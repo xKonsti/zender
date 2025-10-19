@@ -161,7 +161,7 @@ const InstanceData = struct {
     size: [2]f32, // unscaled width,height
     color: [4]u8, // RGBA 0-255
     corner_radius: f32, // unscaled
-    border_width: [4]f32, // unscaled t,r,b,l
+    border_width: [4]f32, // unscaled l,r,t,b
     border_color: [4]u8, // RGBA 0-255
     use_texture: enum(c_int) { solid = 0, text = 1, image = 2 }, // 0 = solid, 1 = text (grayscale), 2 = image (RGBA)
     uv_data: [4]f32, // for text/images, UV data (x, y, width, height)

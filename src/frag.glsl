@@ -4,7 +4,7 @@ flat in vec2 rect_center;
 flat in vec2 rect_size;
 flat in vec4 rect_color;
 flat in float corner_radius;
-flat in vec4 border_width; // t,r,b,l
+flat in vec4 border_width; // l,r,t,b
 flat in vec4 border_color;
 flat in int v_use_texture;
 in vec2 v_uv;
@@ -24,14 +24,15 @@ float RoundedRectSDF(vec2 p, vec2 center, vec2 half_size, float r) {
 // border = (top, right, bottom, left) in clockwise order.
 float RoundedRectInsetSDF(vec2 p, vec2 center, vec2 half_size, float r, vec4 border) {
     // Map into named variables for clarity
-    float top = border.x;
-    float right = border.y;
-    float bottom = border.z;
-    float left = border.w;
+    float left =    border[0];
+    float right =   border[1];
+    float top =     border[2];
+    float bottom =  border[3];
 
     // Compute new center shifted by asymmetric inset
-    vec2 shift = vec2((left - right) * 0.5,
-            (top - bottom) * 0.5);
+    vec2 shift = vec2(
+            (left - right) * 0.5,
+            (bottom - top) * 0.5);
     vec2 new_center = center + shift;
 
     // Shrink half-size according to both sides
@@ -47,6 +48,11 @@ float RoundedRectInsetSDF(vec2 p, vec2 center, vec2 half_size, float r, vec4 bor
 void main() {
     vec2 sample_pos = gl_FragCoord.xy;
     vec2 half_size = rect_size * 0.5;
+
+    float b_left =      border_width[0];
+    float b_right =     border_width[1];
+    float b_top =       border_width[2];
+    float b_bottom =    border_width[3];
     // at max it should be half the size
     float corner_radius_clamped = min(corner_radius, min(half_size.x, half_size.y));
 
@@ -71,9 +77,12 @@ void main() {
     float dist_outer = RoundedRectSDF(sample_pos, rect_center, half_size, corner_radius_clamped);
 
     // Compute distance to inner rectangle (inset by border)
-    vec2 inset_half = half_size - 0.5 * vec2(border_width.w + border_width.y, border_width.x + border_width.z);
-    float inset_radius = max(0.0, corner_radius_clamped - 0.5 * max(max(border_width.x, border_width.y), max(border_width.z, border_width.w)));
-    float dist_inner = RoundedRectSDF(sample_pos, rect_center, inset_half, inset_radius);
+    // vec2 inset_half = half_size - 0.5 * vec2(b_bottom + b_right, b_top + b_left);
+    vec2 inset_half = half_size - 0.5 * vec2(b_left + b_right, b_top + b_bottom);
+            //border_width.w + border_width.y, border_width.x + border_width.z);
+    float inset_radius = max(0.0, corner_radius_clamped - 0.5 * max(max(b_top, b_right), max(b_left, b_bottom)));
+    // float dist_inner = RoundedRectSDF(sample_pos, rect_center, inset_half, inset_radius);
+    float dist_inner = RoundedRectInsetSDF(sample_pos, rect_center, half_size, corner_radius_clamped, border_width);
 
     // Compute softness for anti-aliasing
     float softness_outer = fwidth(dist_outer);
