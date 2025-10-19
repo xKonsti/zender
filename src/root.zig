@@ -25,10 +25,14 @@ var procs: opengl_mod.c.ProcTable = undefined;
 var program: opengl_mod.Program = undefined;
 var renderer2D: opengl_mod.Renderer2D = undefined;
 
+const Config = struct {
+    print_perf: bool = false,
+};
+
 pub const core = struct {
     /// Initialize the zender library
     /// Must be called before any other zender functions
-    pub fn init(alloc: std.mem.Allocator, screen_dimensions: [2]u32, title: [:0]const u8) !void {
+    pub fn init(alloc: std.mem.Allocator, screen_dimensions: [2]u32, title: [:0]const u8, cfg: Config) !void {
         try glfw_mod.init();
         errdefer glfw_mod.deinit();
 
@@ -61,7 +65,7 @@ pub const core = struct {
         zlay.init(.{
             .allocator = alloc,
             .measure_text = measureText,
-            .print_perf = true,
+            .print_perf = cfg.print_perf,
         });
 
         try font_mod.init(alloc);
@@ -179,7 +183,9 @@ pub const drawing = struct {
         for (cmds) |cmd| {
             switch (cmd) {
                 .clipStart => |clip| {
-                    renderer2D.flush();
+                    if (renderer2D.rect_count > 0) {
+                        renderer2D.flush();
+                    }
 
                     const bottom_left_y = @as(f32, @floatFromInt(window.windowSize()[1])) - clip.rect[3] - clip.rect[1];
                     const rect: [4]f32 = .{
