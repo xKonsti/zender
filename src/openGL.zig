@@ -31,7 +31,13 @@ const ShapeCacheKey = struct {
 
 const ShapeCache = struct {
     allocator: std.mem.Allocator,
-    map: std.AutoHashMapUnmanaged(ShapeCacheKey, []const @import("font.zig").ShapedGlyph) = .{},
+    map: std.AutoHashMapUnmanaged(ShapeCacheKey, CachedShape) = .{},
+    frame_number: u128 = 0,
+
+    const CachedShape = struct {
+        glyphs: []const @import("font.zig").ShapedGlyph,
+        last_used_frame: u128,
+    };
 
     pub fn init(allocator: std.mem.Allocator) ShapeCache {
         return .{ .allocator = allocator };
@@ -46,18 +52,25 @@ const ShapeCache = struct {
             // Choose any representative font to call deinitShapedText; slices were allocated
             // with that font's allocator, but Zig's allocators are compatible for free
             // as they store allocator pointer in slice metadata. Use self.allocator to free directly.
-            self.allocator.free(entry.value_ptr.*);
+            self.allocator.free(entry.value_ptr.glyphs);
         }
         self.map.deinit(self.allocator);
     }
 
     pub fn beginFrame(self: *ShapeCache) void {
-        // Free all entries and clear
-        var it = self.map.iterator();
-        while (it.next()) |entry| {
-            self.allocator.free(entry.value_ptr.*);
+        self.frame_number += 1;
+
+        // Only clear entries not used in last 60 frames (~1 second at 60fps)
+        if (self.frame_number % 60 == 0) {
+            var it = self.map.iterator();
+            while (it.next()) |entry| {
+                if (self.frame_number - entry.value_ptr.last_used_frame > 60) {
+                    self.allocator.free(entry.value_ptr.glyphs);
+                    // Remove from map
+                    _ = self.map.remove(entry.key_ptr.*);
+                }
+            }
         }
-        self.map.clearRetainingCapacity();
     }
 
     pub fn get(self: *ShapeCache, font_ref: Font, text: []const u8) ![]const @import("font.zig").ShapedGlyph {
@@ -65,11 +78,16 @@ const ShapeCache = struct {
         h.update(text);
         const key = ShapeCacheKey{ .font_id = font_ref.id, .text_hash = h.final(), .text_len = text.len };
 
-        if (self.map.get(key)) |cached| return cached;
+        if (self.map.getPtr(key)) |cached| {
+            cached.last_used_frame = self.frame_number;
+            return cached.glyphs;
+        }
 
         const shaped = try font_ref.shapeText(text);
-        // store a copy owned by this cache (shapeText already allocs a fresh slice)
-        try self.map.put(self.allocator, key, shaped);
+        try self.map.put(self.allocator, key, .{
+            .glyphs = shaped,
+            .last_used_frame = self.frame_number,
+        });
         return shaped;
     }
 };

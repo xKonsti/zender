@@ -13,7 +13,7 @@ pub fn main() !void {
 
     const allocator = gpa.allocator();
 
-    try zen.core.init(allocator, .{ 1200, 800 }, "Zender Test");
+    try zen.core.init(allocator, .{ 1200, 800 }, "Zender Test", .{});
     defer zen.core.deinit();
 
     calculator_icon = zen.drawing.Image.loadFromMemory(@embedFile("resources/calculator.png")) catch unreachable;
