@@ -153,11 +153,15 @@ pub const layout = struct {
         return zlay.endLayout();
     }
 
+    // FNs
     pub const open = zlay.open;
     pub const close = zlay.close;
     pub const text = zlay.text;
     pub const image = zlay.image;
     pub const hovered = zlay.hovered;
+
+    // Types
+    pub const Border = zlay.Border;
 };
 
 // =============================================================================
@@ -267,11 +271,12 @@ pub const drawing = struct {
                     const text = text_cmd.text;
 
                     renderer2D.drawText(
+                        window.getContentScale(),
                         font_mod.font_collection_geist,
                         text,
                         rect[0],
                         rect[1],
-                        @floatFromInt(text_config.font_size),
+                        @as(f32, @floatFromInt(text_config.font_size)),
                         style,
                         text_color,
                     ) catch |err| {

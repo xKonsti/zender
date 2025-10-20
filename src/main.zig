@@ -16,7 +16,7 @@ pub fn main() !void {
     try zen.core.init(allocator, .{ 1200, 800 }, "Zender Test", .{});
     defer zen.core.deinit();
 
-    calculator_icon = zen.drawing.Image.loadFromMemory(@embedFile("resources/calculator.png")) catch unreachable;
+    calculator_icon = zen.Image.loadFromMemory(@embedFile("resources/calculator.png")) catch unreachable;
 
     while (!zen.core.shouldClose()) {
         zen.core.beginFrame();
@@ -33,7 +33,7 @@ pub fn main() !void {
     }
 }
 
-var calculator_icon: zen.drawing.Image = undefined;
+var calculator_icon: zen.Image = undefined;
 // zen.drawing.Image.loadFromMemory(@embedFile("resources/calculator.png"));
 
 fn interface() void {

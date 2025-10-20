@@ -418,11 +418,11 @@ pub const Renderer2D = struct {
         self.rect_count += 1;
     }
 
-    pub fn drawText(self: *Renderer2D, font_collection: FontCollection, text: []const u8, x: f32, y: f32, size: f32, style: FontStyle, text_color: [4]u8) !void {
+    pub fn drawText(self: *Renderer2D, window_scale: [2]f32, font_collection: FontCollection, text: []const u8, x: f32, y: f32, size: f32, style: FontStyle, text_color: [4]u8) !void {
         // const now = std.time.milliTimestamp();
         // defer std.debug.print("drawText took {d}ms\n", .{std.time.milliTimestamp() - now});
 
-        const font = font_collection.getFont(size, style);
+        const font = font_collection.getFont(size * window_scale[1], style);
         if (self.current_texture_id == null or self.current_font_id == null or self.current_font_id.? != font.id) {
             self.flush();
             const tex = self.getOrCreateAtlasTexture(font.atlas, font.id);
@@ -518,6 +518,7 @@ pub const Renderer2D = struct {
         }
     }
 
+    //TODO: based on window scale the image should be in higher or lower resolution
     pub fn drawImage(
         self: *Renderer2D,
         image: ImageTexture,

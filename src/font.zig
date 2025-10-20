@@ -19,7 +19,7 @@ var freetype_lib: ft.FT_Library = undefined;
 fn loadFontFromMem(allocator: std.mem.Allocator, comptime font_data: []const u8, pixel_height: f32, dst: *Font) void {
     // the times two is because of highdpi rendering
     // TODO: on normal screens without highdpi this seems to also be fine but look at it in greater detail
-    dst.* = Font.fromMemory(allocator, font_data, pixel_height * 2) catch |err| {
+    dst.* = Font.fromMemory(allocator, font_data, pixel_height) catch |err| {
         std.log.err("Font load failed: {s}", .{@errorName(err)});
         unreachable;
     };
