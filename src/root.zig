@@ -320,6 +320,10 @@ pub const drawing = struct {
         renderer2D.drawRect(x, y, w, h, config);
     }
 
+    pub fn drawLine(x1: f32, y1: f32, x2: f32, y2: f32, config: Renderer2D.LineConfig) void {
+        renderer2D.drawLine(x1, y1, x2, y2, config);
+    }
+
     pub fn drawText(window_scale: [2]f32, font_collection: FontCollection, text: []const u8, x: f32, y: f32, size: f32, style: FontStyle, text_color: Color) void {
         renderer2D.drawText(window_scale, font_collection, text, x, y, size, style, text_color);
     }

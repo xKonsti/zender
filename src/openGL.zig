@@ -168,7 +168,17 @@ const InstanceData = struct {
     use_texture: enum(c_int) { solid = 0, text = 1, image = 2 }, // 0 = solid, 1 = text (grayscale), 2 = image (RGBA)
     uv_data: [4]f32, // for text/images, UV data (x, y, width, height)
 
-    fn fromRect(x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]u8, border_width: [4]f32, border_color: [4]u8, rotation: f32) InstanceData {
+    fn fromRect(
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        r: f32,
+        color: [4]u8,
+        border_width: [4]f32,
+        border_color: [4]u8,
+        rotation: f32,
+    ) InstanceData {
         return InstanceData{
             .pos_tl = .{ x, y },
             .size = .{ w, h },
@@ -376,11 +386,11 @@ pub const Renderer2D = struct {
         rotation_deg: f32 = 0,
     };
 
-    pub fn drawRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, config: RectConfig) void {
+    pub fn drawRect(self: *Renderer2D, tl_x: f32, tl_y: f32, w: f32, h: f32, config: RectConfig) void {
         if (self.rect_count >= MAX_RECTANGLES) self.flush();
         self.instance_data[self.rect_count] = .fromRect(
-            x,
-            y,
+            tl_x,
+            tl_y,
             w,
             h,
             config.corner_radius[0],
@@ -389,6 +399,56 @@ pub const Renderer2D = struct {
             config.border_color,
             std.math.degreesToRadians(config.rotation_deg),
         );
+        self.rect_count += 1;
+    }
+
+    pub const LineConfig = struct {
+        width: f32 = 1.0,
+        color: [4]u8 = .{ 255, 255, 255, 255 },
+        cap: LineCap = .butt,
+    };
+
+    pub const LineCap = enum {
+        butt,
+        square,
+        round,
+    };
+
+    pub fn drawLine(self: *Renderer2D, x1: f32, y1: f32, x2: f32, y2: f32, config: LineConfig) void {
+        if (self.rect_count >= MAX_RECTANGLES) self.flush();
+
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const length = @sqrt(dx * dx + dy * dy);
+        const angle_rad = std.math.atan2(dy, dx);
+
+        const center_x = (x1 + x2) / 2;
+        const center_y = (y1 + y2) / 2;
+
+        const width = length;
+        const height = config.width;
+
+        const tl_x = center_x - width / 2;
+        const tl_y = center_y - height / 2;
+
+        // std.debug.print("center is {d} {d} with angle {d}\n", .{ center_x, center_y, std.math.radiansToDegrees(angle_rad) });
+        // std.debug.print("pos_tl is {d} {d} with angle {d}\n", .{ tl_x, tl_y, std.math.radiansToDegrees(angle_rad) });
+
+        self.instance_data[self.rect_count] = .fromRect(
+            tl_x,
+            tl_y,
+            width,
+            height,
+            switch (config.cap) {
+                .butt, .square => 0,
+                .round => config.width * 0.5,
+            },
+            config.color,
+            .{ 0, 0, 0, 0 },
+            .{ 0, 0, 0, 0 },
+            -angle_rad,
+        );
+
         self.rect_count += 1;
     }
 

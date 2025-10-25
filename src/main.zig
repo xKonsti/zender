@@ -12,6 +12,8 @@ pub fn main() !void {
         _ = gpa.deinit();
     }
 
+    const now = std.time.milliTimestamp();
+
     const allocator = gpa.allocator();
 
     try zen.core.init(allocator, .{ 1200, 800 }, "Zender Test", .{});
@@ -28,10 +30,30 @@ pub fn main() !void {
 
         zen.drawing.start();
         zen.drawing.drawLayout(interface_cmds);
-        zen.drawing.drawRect(100, 100, 100, 100, .{
-            .corner_radius = .{16} ** 4,
-            .color = .{ 255, 255, 255, 255 },
-            .rotation_deg = 45,
+        zen.drawing.drawRect(100, 400, 100, 100, .{
+            // .corner_radius = .{16} ** 4,
+            .color = .{ 200, 200, 200, 255 },
+            .rotation_deg = @floatFromInt(@mod(@divFloor(std.time.milliTimestamp() - now, 15), 360)),
+        });
+        // Simple line
+        zen.drawing.drawLine(10, 10, 500, 400, .{
+            .width = 40.0,
+            .cap = .round,
+            .color = .{ 0, 0, 0, 255 },
+        });
+
+        // Thick line with round caps
+        zen.drawing.drawLine(100, 250, 300, 350, .{
+            .width = 40.0,
+            .color = .{ 0, 255, 0, 255 }, // Green
+            .cap = .round,
+        });
+
+        // Square cap line
+        zen.drawing.drawLine(100, 400, 300, 500, .{
+            .width = 8.0,
+            .color = .{ 0, 0, 255, 255 }, // Blue
+            .cap = .square,
         });
         zen.drawing.end();
 

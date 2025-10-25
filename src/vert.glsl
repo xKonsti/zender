@@ -38,25 +38,33 @@ void main() {
     float s = sin(rotation_rad);
     cos_rot = c;
     sin_rot = s;
+
     mat2 rot = mat2(c, -s, s, c);
 
-    // Compute vertex position relative to rectangle center, apply rotation
-    vec2 local_pos = base_pos * inst_size; // base_pos is [-0.5, 0.5]
+    vec2 local_pos = base_pos * inst_size;
     vec2 rotated = rot * local_pos;
-    vec2 final_pos_unscaled = rect_center_unscaled + rotated;
+    vec2 final_pos_unscaled = rotated + rect_center_unscaled;
 
-    // Convert to window coordinates
     vec2 final_pos_scaled = final_pos_unscaled * window_scale;
 
-    // Convert to NDC: (0,0) → (-1,1), (buffer_size.x, buffer_size.y) → (1,-1)
     vec2 ndc = (final_pos_scaled / buffer_size) * 2.0 - 1.0;
-    ndc.y = -ndc.y; // Flip Y for top-left origin
+    ndc.y = -ndc.y; // Flip Y for top-left origin in api
     gl_Position = vec4(ndc, 0.0, 1.0);
 
     // Pass instance data to fragment shader
     rect_center = rect_center_unscaled * window_scale;
     rect_center.y = buffer_size.y - rect_center.y;
-    rect_size = inst_size * window_scale;
+
+    // Calculate the expanded bounding box size for rotation
+    float abs_cos = abs(cos_rot);
+    float abs_sin = abs(sin_rot);
+    vec2 rotated_size = vec2(
+            inst_size.x * abs_cos + inst_size.y * abs_sin,
+            inst_size.x * abs_sin + inst_size.y * abs_cos
+        );
+
+    // Pass the expanded size to fragment shader
+    rect_size = rotated_size * window_scale;
     rect_color = inst_color;
 
     float scale_min = min(window_scale.x, window_scale.y);
