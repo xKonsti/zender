@@ -414,25 +414,39 @@ pub const Renderer2D = struct {
         round,
     };
 
-    pub fn drawLine(self: *Renderer2D, x1: f32, y1: f32, x2: f32, y2: f32, config: LineConfig) void {
+    pub fn drawLine(self: *Renderer2D, p1: [2]f32, p2: [2]f32, config: LineConfig) void {
         if (self.rect_count >= MAX_RECTANGLES) self.flush();
+
+        const x1 = p1[0];
+        const y1 = p1[1];
+        const x2 = p2[0];
+        const y2 = p2[1];
 
         const dx = x2 - x1;
         const dy = y2 - y1;
         const length = @sqrt(dx * dx + dy * dy);
         const angle_rad = std.math.atan2(dy, dx);
 
+        // Extend the visual line length depending on cap type
+        var extra_len: f32 = 0.0;
+        switch (config.cap) {
+            .square, .round => extra_len = config.width,
+            .butt => {},
+        }
+
+        const total_length = length + extra_len;
+
+        // Center is still midpoint between p1 and p2
         const center_x = (x1 + x2) / 2;
         const center_y = (y1 + y2) / 2;
 
-        const width = length;
+        const width = total_length;
         const height = config.width;
 
+        // The rectangle should be centered at the midpoint of the line.
+        // When rotating, top-left is computed as offset from center.
         const tl_x = center_x - width / 2;
         const tl_y = center_y - height / 2;
-
-        // std.debug.print("center is {d} {d} with angle {d}\n", .{ center_x, center_y, std.math.radiansToDegrees(angle_rad) });
-        // std.debug.print("pos_tl is {d} {d} with angle {d}\n", .{ tl_x, tl_y, std.math.radiansToDegrees(angle_rad) });
 
         self.instance_data[self.rect_count] = .fromRect(
             tl_x,
@@ -441,7 +455,7 @@ pub const Renderer2D = struct {
             height,
             switch (config.cap) {
                 .butt, .square => 0,
-                .round => config.width * 0.5,
+                .round => config.width * 0.5, // radius for caps
             },
             config.color,
             .{ 0, 0, 0, 0 },

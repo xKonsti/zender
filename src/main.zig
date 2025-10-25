@@ -36,25 +36,29 @@ pub fn main() !void {
             .rotation_deg = @floatFromInt(@mod(@divFloor(std.time.milliTimestamp() - now, 15), 360)),
         });
         // Simple line
-        zen.drawing.drawLine(10, 10, 500, 400, .{
-            .width = 40.0,
+        const mouse_pos = zen.io.getMousePosition();
+        zen.drawing.drawLine(
+            .{ 50, 50 },
+            .{ @floatCast(mouse_pos[0]), @floatCast(mouse_pos[1]) },
+            .{
+                .width = 4.0,
+                .cap = .round,
+                .color = .{ 0, 0, 0, 255 },
+            },
+        );
+
+        zen.drawing.drawLines(&.{
+            .{ 100, 100 },
+            .{ 200, 200 },
+            .{ 800, 300 },
+            .{ 300, 600 },
+            .{ 100, 100 },
+        }, .{
+            .width = 2.0,
             .cap = .round,
             .color = .{ 0, 0, 0, 255 },
         });
 
-        // Thick line with round caps
-        zen.drawing.drawLine(100, 250, 300, 350, .{
-            .width = 40.0,
-            .color = .{ 0, 255, 0, 255 }, // Green
-            .cap = .round,
-        });
-
-        // Square cap line
-        zen.drawing.drawLine(100, 400, 300, 500, .{
-            .width = 8.0,
-            .color = .{ 0, 0, 255, 255 }, // Blue
-            .cap = .square,
-        });
         zen.drawing.end();
 
         zen.core.endFrame();

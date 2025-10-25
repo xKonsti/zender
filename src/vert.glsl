@@ -41,33 +41,32 @@ void main() {
 
     mat2 rot = mat2(c, -s, s, c);
 
+    // Position the quad's vertex: apply rotation around center in unscaled coords
     vec2 local_pos = base_pos * inst_size;
     vec2 rotated = rot * local_pos;
     vec2 final_pos_unscaled = rotated + rect_center_unscaled;
 
+    // Scale to buffer coordinates
     vec2 final_pos_scaled = final_pos_unscaled * window_scale;
 
     vec2 ndc = (final_pos_scaled / buffer_size) * 2.0 - 1.0;
     ndc.y = -ndc.y; // Flip Y for top-left origin in api
     gl_Position = vec4(ndc, 0.0, 1.0);
 
-    // Pass instance data to fragment shader
+    // Pass instance data to fragment shader (in buffer coordinates)
     rect_center = rect_center_unscaled * window_scale;
+    // Convert to GL framebuffer coordinate space where origin is top-left
     rect_center.y = buffer_size.y - rect_center.y;
 
-    // Calculate the expanded bounding box size for rotation
-    float abs_cos = abs(cos_rot);
-    float abs_sin = abs(sin_rot);
-    vec2 rotated_size = vec2(
-            inst_size.x * abs_cos + inst_size.y * abs_sin,
-            inst_size.x * abs_sin + inst_size.y * abs_cos
-        );
+    // IMPORTANT: pass the unrotated rect size (in buffer coordinates) to the fragment shader.
+    // The fragment shader applies an inverse rotation to the fragment position and expects
+    // the rectangle half-size to be the original, unrotated half-size.
+    rect_size = inst_size * window_scale;
 
-    // Pass the expanded size to fragment shader
-    rect_size = rotated_size * window_scale;
     rect_color = inst_color;
 
     float scale_min = min(window_scale.x, window_scale.y);
+    // Corner radius needs to be clamped against the (unrotated) rect size
     corner_radius = min(inst_corner_radius * scale_min, min(rect_size.x, rect_size.y));
     border_width = inst_border_width * scale_min;
     border_color = inst_border_color;

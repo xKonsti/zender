@@ -47,7 +47,22 @@ float RoundedRectInsetSDF(vec2 p, vec2 center, vec2 half_size, float r, vec4 bor
     return RoundedRectSDF(p, new_center, new_half, new_r);
 }
 
-void main() {
+void text() {
+    vec4 color = rect_color;
+
+    float mask = texture(tex, v_uv).r;
+    color.a *= mask;
+    out_color = color;
+}
+
+void image() {
+    vec4 color = rect_color;
+
+    vec4 tex_color = texture(tex, v_uv);
+    out_color = tex_color * color;
+}
+
+void solid() {
     vec2 sample_pos = gl_FragCoord.xy;
     vec2 half_size = rect_size * 0.5;
 
@@ -60,65 +75,64 @@ void main() {
     float corner_radius_clamped = min(corner_radius, min(half_size.x, half_size.y));
 
     vec4 color = rect_color;
+
+    // === ROTATION HANDLING ===
+    mat2 rot = mat2(cos_rot, -sin_rot, sin_rot, cos_rot);
+    vec2 offset = sample_pos - rect_center;
+    vec2 local_offset = rot * offset;
+    vec2 local_pos = rect_center + local_offset;
+
+    // Now compute SDF in local (unrotated) space
+    float dist_outer = RoundedRectSDF(local_pos, rect_center, half_size, corner_radius_clamped);
+
+    // Compute distance to inner rectangle (inset by border)
+    float dist_inner = RoundedRectInsetSDF(
+            local_pos,
+            rect_center,
+            half_size,
+            corner_radius_clamped,
+            border_width
+        );
+
+    // Compute softness for anti-aliasing
+    float softness_outer = fwidth(dist_outer);
+    float softness_inner = fwidth(dist_inner);
+
+    // Border alpha = inside outer, outside inner
+    float alpha_border = smoothstep(0.0, softness_outer, -dist_outer) *
+            smoothstep(0.0, softness_inner, dist_inner);
+
+    // Fill alpha = inside inner
+    float alpha_fill = 1.0 - smoothstep(0.0, softness_inner, dist_inner);
+
+    // Discard fragments outside outer rectangle
+    if (dist_outer > 0.0) discard;
+
+    // Combine border and fill to avoid 1-pixel gaps
+    float alpha = clamp(alpha_fill * rect_color.a + alpha_border * border_color.a, 0.0, 1.0);
+    float mix_factor = (alpha > 0.0) ? (alpha_border / alpha) : 0.0;
+
+    out_color = vec4(
+            mix(color.rgb, border_color.rgb, mix_factor),
+            alpha
+        );
+}
+
+void main() {
     switch (v_use_texture) {
-        case 0: // handle text rendering
+        case 0: // handle solids (e.g. lines, rectangles)
         {
-            // === ROTATION HANDLING ===
-            mat2 inv_rot = mat2(
-                    cos_rot, sin_rot,
-                    -sin_rot, cos_rot
-                );
-            vec2 offset = sample_pos - rect_center;
-            vec2 local_offset = inv_rot * offset;
-            vec2 local_pos = rect_center + local_offset;
-
-            // Now compute SDF in local (unrotated) space
-            float dist_outer = RoundedRectSDF(local_pos, rect_center, half_size, corner_radius_clamped);
-
-            // Compute distance to inner rectangle (inset by border)
-            float dist_inner = RoundedRectInsetSDF(
-                    local_pos,
-                    rect_center,
-                    half_size,
-                    corner_radius_clamped,
-                    border_width
-                );
-
-            // Compute softness for anti-aliasing
-            float softness_outer = fwidth(dist_outer);
-            float softness_inner = fwidth(dist_inner);
-
-            // Border alpha = inside outer, outside inner
-            float alpha_border = smoothstep(0.0, softness_outer, -dist_outer) *
-                    smoothstep(0.0, softness_inner, dist_inner);
-
-            // Fill alpha = inside inner
-            float alpha_fill = 1.0 - smoothstep(0.0, softness_inner, dist_inner);
-
-            // Discard fragments outside outer rectangle
-            if (dist_outer > 0.0) discard;
-
-            // Combine border and fill to avoid 1-pixel gaps
-            float alpha = clamp(alpha_fill * rect_color.a + alpha_border * border_color.a, 0.0, 1.0);
-            float mix_factor = (alpha > 0.0) ? (alpha_border / alpha) : 0.0;
-
-            out_color = vec4(
-                    mix(color.rgb, border_color.rgb, mix_factor),
-                    alpha
-                );
+            solid();
             return;
         }
         case 1: // Handle text rendering (alpha mask)
         {
-            float mask = texture(tex, v_uv).r;
-            color.a *= mask;
-            out_color = color;
+            text();
             return;
         }
         case 2: // Handle image rendering (full RGBA)
         {
-            vec4 tex_color = texture(tex, v_uv);
-            out_color = tex_color * color;
+            image();
             return;
         }
     }

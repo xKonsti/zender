@@ -320,8 +320,18 @@ pub const drawing = struct {
         renderer2D.drawRect(x, y, w, h, config);
     }
 
-    pub fn drawLine(x1: f32, y1: f32, x2: f32, y2: f32, config: Renderer2D.LineConfig) void {
-        renderer2D.drawLine(x1, y1, x2, y2, config);
+    pub fn drawLine(p1: [2]f32, p2: [2]f32, config: Renderer2D.LineConfig) void {
+        renderer2D.drawLine(p1, p2, config);
+    }
+
+    pub fn drawLines(points: []const [2]f32, config: Renderer2D.LineConfig) void {
+        for (points, 0..) |p, i| {
+            if (i == 0) {
+                drawLine(p, points[1], config);
+            } else {
+                drawLine(points[i - 1], p, config);
+            }
+        }
     }
 
     pub fn drawText(window_scale: [2]f32, font_collection: FontCollection, text: []const u8, x: f32, y: f32, size: f32, style: FontStyle, text_color: Color) void {
