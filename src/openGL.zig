@@ -9,6 +9,7 @@ const Font = @import("font.zig").Font;
 const FontAtlas = @import("font.zig").FontAtlas;
 const FontCollection = @import("font.zig").FontCollection;
 const FontStyle = @import("font.zig").FontStyle;
+const zlay = @import("zlayout");
 
 // --- Per-frame shaping cache (shared by measureText and drawText) ---
 const ShapeCacheKey = struct {
@@ -163,10 +164,11 @@ const InstanceData = struct {
     corner_radius: f32, // unscaled
     border_width: [4]f32, // unscaled l,r,t,b
     border_color: [4]u8, // RGBA 0-255
+    rotation: f32, // in radians
     use_texture: enum(c_int) { solid = 0, text = 1, image = 2 }, // 0 = solid, 1 = text (grayscale), 2 = image (RGBA)
     uv_data: [4]f32, // for text/images, UV data (x, y, width, height)
 
-    fn fromRect(x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]u8, border_width: [4]f32, border_color: [4]u8) InstanceData {
+    fn fromRect(x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]u8, border_width: [4]f32, border_color: [4]u8, rotation: f32) InstanceData {
         return InstanceData{
             .pos_tl = .{ x, y },
             .size = .{ w, h },
@@ -176,6 +178,7 @@ const InstanceData = struct {
             .border_color = border_color,
             .use_texture = .solid,
             .uv_data = .{ 0, 0, 0, 0 },
+            .rotation = rotation,
         };
     }
 };
@@ -262,6 +265,10 @@ pub const Renderer2D = struct {
         c.VertexAttribPointer(8, 4, c.FLOAT, c.FALSE, stride, @offsetOf(InstanceData, "uv_data"));
         c.VertexAttribDivisor(8, 1);
         c.EnableVertexAttribArray(8);
+
+        c.VertexAttribPointer(9, 1, c.FLOAT, c.FALSE, stride, @offsetOf(InstanceData, "rotation"));
+        c.VertexAttribDivisor(9, 1);
+        c.EnableVertexAttribArray(9);
 
         // Unbind VAO
         c.BindVertexArray(0);
@@ -350,49 +357,6 @@ pub const Renderer2D = struct {
         }
     }
 
-    fn uploadAtlasToTexture(texture: c_uint, font_atlas: FontAtlas) void {
-        const now = std.time.microTimestamp();
-        defer std.debug.print("uploadAtlas took {d}us\n", .{std.time.microTimestamp() - now});
-        // Make sure we target texture unit 0 because that's what the shader expects via Uniform1i(...)
-        c.ActiveTexture(c.TEXTURE0);
-        c.BindTexture(c.TEXTURE_2D, texture);
-
-        // Pixel alignment for single-channel data
-        c.PixelStorei(c.UNPACK_ALIGNMENT, 1);
-
-        // Upload: internal format RED, data format RED
-        c.TexImage2D(
-            c.TEXTURE_2D,
-            0,
-            c.RED, // internal format
-            @intCast(font_atlas.width),
-            @intCast(font_atlas.height),
-            0,
-            c.RED, // source/pixel format
-            c.UNSIGNED_BYTE,
-            font_atlas.pixel.ptr,
-        );
-
-        // Set sampling / wrapping
-        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_MIN_FILTER, c.LINEAR);
-        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_MAG_FILTER, c.LINEAR);
-        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_WRAP_S, c.CLAMP_TO_EDGE);
-        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_WRAP_T, c.CLAMP_TO_EDGE);
-
-        // --- important: swizzle RED -> RGB, ALPHA -> 1
-        // This makes sampling texture(tex, uv) return (r,r,r,1) for compatibility
-        // on backends that do not auto-swizzle RED to vec4.
-        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_SWIZZLE_R, c.RED);
-        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_SWIZZLE_G, c.RED);
-        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_SWIZZLE_B, c.RED);
-        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_SWIZZLE_A, c.ONE);
-
-        const e = c.GetError();
-        if (e != c.NO_ERROR) {
-            std.log.err("OpenGL error after uploadAtlas: {d}", .{e});
-        }
-    }
-
     fn getOrCreateAtlasTexture(self: *Renderer2D, font_atlas: FontAtlas, font_id: u64) c_uint {
         if (self.font_textures.get(font_id)) |tex| return tex;
         var tex: c_uint = undefined;
@@ -404,17 +368,27 @@ pub const Renderer2D = struct {
         return tex;
     }
 
-    pub inline fn drawRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, color: [4]u8) void {
-        drawRoundedBorderRect(self, x, y, w, h, 0.0, color, .{0} ** 4, .{0} ** 4);
-    }
+    pub const RectConfig = struct {
+        color: [4]u8 = .{0} ** 4,
+        corner_radius: [4]f32 = .{0} ** 4,
+        border_width: [4]f32 = .{0} ** 4,
+        border_color: [4]u8 = .{0} ** 4,
+        rotation_deg: f32 = 0,
+    };
 
-    pub fn drawRoundedRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]u8) void {
-        drawRoundedBorderRect(self, x, y, w, h, r, color, .{0} ** 4, .{0} ** 4);
-    }
-
-    pub fn drawRoundedBorderRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, r: f32, color: [4]u8, border_width: [4]f32, border_color: [4]u8) void {
+    pub fn drawRect(self: *Renderer2D, x: f32, y: f32, w: f32, h: f32, config: RectConfig) void {
         if (self.rect_count >= MAX_RECTANGLES) self.flush();
-        self.instance_data[self.rect_count] = .fromRect(x, y, w, h, r, color, border_width, border_color);
+        self.instance_data[self.rect_count] = .fromRect(
+            x,
+            y,
+            w,
+            h,
+            config.corner_radius[0],
+            config.color,
+            config.border_width,
+            config.border_color,
+            std.math.degreesToRadians(config.rotation_deg),
+        );
         self.rect_count += 1;
     }
 
@@ -509,6 +483,7 @@ pub const Renderer2D = struct {
                     @as(f32, @floatFromInt(rect.w)) / @as(f32, @floatFromInt(font.atlas.width)),
                     @as(f32, @floatFromInt(rect.h)) / @as(f32, @floatFromInt(font.atlas.height)),
                 },
+                .rotation = 0,
             };
             self.rect_count += 1;
 
@@ -549,6 +524,7 @@ pub const Renderer2D = struct {
             .border_color = .{0} ** 4,
             .use_texture = .image,
             .uv_data = .{ 0.0, 0.0, 1.0, 1.0 }, // full texture
+            .rotation = 0,
         };
         self.rect_count += 1;
     }
@@ -580,6 +556,49 @@ pub const Renderer2D = struct {
         try self.image_textures.put(id_owned, image);
 
         return image;
+    }
+
+    fn uploadAtlasToTexture(texture: c_uint, font_atlas: FontAtlas) void {
+        const now = std.time.microTimestamp();
+        defer std.debug.print("uploadAtlas took {d}us\n", .{std.time.microTimestamp() - now});
+        // Make sure we target texture unit 0 because that's what the shader expects via Uniform1i(...)
+        c.ActiveTexture(c.TEXTURE0);
+        c.BindTexture(c.TEXTURE_2D, texture);
+
+        // Pixel alignment for single-channel data
+        c.PixelStorei(c.UNPACK_ALIGNMENT, 1);
+
+        // Upload: internal format RED, data format RED
+        c.TexImage2D(
+            c.TEXTURE_2D,
+            0,
+            c.RED, // internal format
+            @intCast(font_atlas.width),
+            @intCast(font_atlas.height),
+            0,
+            c.RED, // source/pixel format
+            c.UNSIGNED_BYTE,
+            font_atlas.pixel.ptr,
+        );
+
+        // Set sampling / wrapping
+        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_MIN_FILTER, c.LINEAR);
+        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_MAG_FILTER, c.LINEAR);
+        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_WRAP_S, c.CLAMP_TO_EDGE);
+        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_WRAP_T, c.CLAMP_TO_EDGE);
+
+        // --- important: swizzle RED -> RGB, ALPHA -> 1
+        // This makes sampling texture(tex, uv) return (r,r,r,1) for compatibility
+        // on backends that do not auto-swizzle RED to vec4.
+        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_SWIZZLE_R, c.RED);
+        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_SWIZZLE_G, c.RED);
+        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_SWIZZLE_B, c.RED);
+        c.TexParameteri(c.TEXTURE_2D, c.TEXTURE_SWIZZLE_A, c.ONE);
+
+        const e = c.GetError();
+        if (e != c.NO_ERROR) {
+            std.log.err("OpenGL error after uploadAtlas: {d}", .{e});
+        }
     }
 };
 

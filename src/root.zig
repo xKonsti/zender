@@ -3,17 +3,19 @@ const assert = std.debug.assert;
 
 const zlay = @import("zlayout");
 
+const font_mod = @import("font.zig");
+const FontCollection = font_mod.FontCollection;
+const FontStyle = font_mod.FontStyle;
+const glfw_mod = @import("glfw.zig");
+const Renderer2D = opengl_mod.Renderer2D;
+const opengl_mod = @import("openGL.zig");
+pub const Image = opengl_mod.ImageTexture;
+
 const rgfw = @cImport({
     @cDefine("RGFW_IMPLEMENTATION", {});
     @cDefine("RGFW_OPENGL", {});
     @cInclude("RGFW.h");
 });
-
-const font_mod = @import("font.zig");
-const FontCollection = font_mod.FontCollection;
-const FontStyle = font_mod.FontStyle;
-const glfw_mod = @import("glfw.zig");
-const opengl_mod = @import("openGL.zig");
 
 // Import existing modules
 // =============================================================================
@@ -239,15 +241,22 @@ pub const drawing = struct {
                     //     std.log.err("The width is {d} {d} {d} {d}", .{ border_widths[0], border_widths[1], border_widths[2], border_widths[3] });
                     //     std.log.err("And the color is {d} {d} {d} {d}", .{ border_color[0], border_color[1], border_color[2], border_color[3] });
                     // }
-                    renderer2D.drawRoundedBorderRect(
+                    renderer2D.drawRect(
                         rect[0],
                         rect[1],
                         rect[2],
                         rect[3],
-                        @floatFromInt(rect_cmd.corner_radius.tl),
-                        color,
-                        border_widths,
-                        border_color,
+                        .{
+                            .corner_radius = .{
+                                @floatFromInt(rect_cmd.corner_radius.tl),
+                                @floatFromInt(rect_cmd.corner_radius.tr),
+                                @floatFromInt(rect_cmd.corner_radius.br),
+                                @floatFromInt(rect_cmd.corner_radius.bl),
+                            },
+                            .color = color,
+                            .border_width = border_widths,
+                            .border_color = border_color,
+                        },
                     );
                 },
                 .drawText => |text_cmd| {
@@ -307,67 +316,22 @@ pub const drawing = struct {
 
     const Color = [4]u8;
 
-    pub fn drawRect(
-        tl_x: f32,
-        tl_y: f32,
-        width: f32,
-        height: f32,
-        fill_color: Color,
-    ) void {
-        renderer2D.drawRect(tl_x, tl_y, width, height, fill_color);
+    pub fn drawRect(x: f32, y: f32, w: f32, h: f32, config: Renderer2D.RectConfig) void {
+        renderer2D.drawRect(x, y, w, h, config);
     }
 
-    pub fn drawRoundedRect(
-        tl_x: f32,
-        tl_y: f32,
-        width: f32,
-        height: f32,
-        corner_radius: f32,
-        fill_color: Color,
-    ) void {
-        renderer2D.drawRoundedRect(tl_x, tl_y, width, height, corner_radius, fill_color);
+    pub fn drawText(window_scale: [2]f32, font_collection: FontCollection, text: []const u8, x: f32, y: f32, size: f32, style: FontStyle, text_color: Color) void {
+        renderer2D.drawText(window_scale, font_collection, text, x, y, size, style, text_color);
     }
 
-    pub fn drawRoundedBorderRect(
-        tl_x: f32,
-        tl_y: f32,
-        width: f32,
-        height: f32,
-        corner_radius: f32,
-        fill_color: Color,
-        border_width: f32,
-        border_color: Color,
-    ) void {
-        renderer2D.drawRoundedBorderRect(tl_x, tl_y, width, height, corner_radius, border_width, border_color, fill_color);
-    }
-
-    pub fn drawText(
-        font_collection: FontCollection,
-        text: []const u8,
-        tl_x: f32,
-        tl_y: f32,
-        pixel_height: f32,
-        style: FontStyle,
-        text_color: Color,
-    ) void {
-        renderer2D.drawText(font_collection, text, tl_x, tl_y, pixel_height, style, text_color) catch |err| {
-            std.log.err("Failed to draw text: {}", .{err});
-        };
-    }
-
-    pub fn drawImage(
-        image: Image,
-        rect: zlay.Rect,
-    ) void {
-        renderer2D.drawImage(image, rect.x, rect.y, rect.w, rect.h, .{ 255, 255, 255, 255 });
+    pub fn drawImage(image: *const anyopaque, x: f32, y: f32, w: f32, h: f32, tint: Color) void {
+        renderer2D.drawImage(image, x, y, w, h, tint);
     }
 };
 
 // =============================================================================
 // Image
 // =============================================================================
-pub const Image = opengl_mod.ImageTexture;
-
 // =============================================================================
 // IO (i.e. Keyboard, Mouse, ...)
 // =============================================================================

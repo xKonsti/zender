@@ -1,5 +1,6 @@
-const zen = @import("root.zig");
 const std = @import("std");
+
+const zen = @import("root.zig");
 const zlay = zen.layout;
 
 var text: std.ArrayList(u8) = .empty;
@@ -27,6 +28,11 @@ pub fn main() !void {
 
         zen.drawing.start();
         zen.drawing.drawLayout(interface_cmds);
+        zen.drawing.drawRect(100, 100, 100, 100, .{
+            .corner_radius = .{16} ** 4,
+            .color = .{ 255, 255, 255, 255 },
+            .rotation_deg = 45,
+        });
         zen.drawing.end();
 
         zen.core.endFrame();
