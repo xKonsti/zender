@@ -4,7 +4,7 @@ const assert = std.debug.assert;
 const zlay = @import("zlayout");
 
 const font_mod = @import("font.zig");
-const FontCollection = font_mod.FontCollection;
+const FontFamily = font_mod.FontFamily;
 const FontStyle = font_mod.FontStyle;
 const glfw_mod = @import("glfw.zig");
 const Renderer2D = opengl_mod.Renderer2D;
@@ -71,6 +71,7 @@ pub const core = struct {
         });
 
         try font_mod.init(alloc);
+        try font_mod.preloadCommon(alloc);
     }
 
     /// Clean up zender resources
@@ -281,7 +282,7 @@ pub const drawing = struct {
 
                     renderer2D.drawText(
                         window.getContentScale(),
-                        font_mod.font_collection_geist,
+                        font_mod.FontFamily.geist,
                         text,
                         rect[0],
                         rect[1],
@@ -334,7 +335,7 @@ pub const drawing = struct {
         }
     }
 
-    pub fn drawText(window_scale: [2]f32, font_collection: FontCollection, text: []const u8, x: f32, y: f32, size: f32, style: FontStyle, text_color: Color) void {
+    pub fn drawText(window_scale: [2]f32, font_collection: FontFamily, text: []const u8, x: f32, y: f32, size: f32, style: FontStyle, text_color: Color) void {
         renderer2D.drawText(window_scale, font_collection, text, x, y, size, style, text_color);
     }
 
@@ -699,11 +700,11 @@ pub const io = struct {
 // =============================================================================
 // MISC & NO PROPER PLACE FOUND YET
 // =============================================================================
-fn measureText(text: []const u8, config: zlay.TextProps) zlay.Pair {
-    if (text.len == 0) return zlay.Pair{ 0, 0 };
+pub fn measureText(text: []const u8, config: zlay.TextProps) zlay.Pair {
+    if (text.len == 0) return .{ 0, 0 };
 
-    // Pick font by size and style
-    const style: font_mod.FontStyle = switch (config.font_style) {
+    // Convert external FontStyle to internal FontStyle
+    const style: FontStyle = switch (config.font_style) {
         .light => .light,
         .regular => .regular,
         .medium => .medium,
@@ -711,12 +712,18 @@ fn measureText(text: []const u8, config: zlay.TextProps) zlay.Pair {
         .bold => .bold,
         .black => .black,
     };
+
     const size: f32 = @floatFromInt(config.font_size);
+
+    // font_id currently only supports default (geist)
     if (config.font_id != 0) {
-        std.log.warn("font_id != 0 not supported", .{});
-        return zlay.Pair{ 0, 0 };
+        std.log.warn("font_id != 0 not supported yet, defaulting to geist", .{});
     }
-    const font_obj = font_mod.font_collection_geist.getFont(size, style);
+
+    const font_obj = font_mod.getFont(.geist, style, size) catch |err| {
+        std.log.err("Failed to get font: {s}", .{@errorName(err)});
+        return .{ 0, 0 };
+    };
 
     // Scale factor between atlas rasterization and requested size
     const scale = size / font_obj.pixel_height;
@@ -725,10 +732,11 @@ fn measureText(text: []const u8, config: zlay.TextProps) zlay.Pair {
     const line_advance_px = @as(f32, @floatFromInt(font_obj.ft_face.*.size.*.metrics.height)) / 64.0;
 
     // Shape text using HarfBuzz
-    const glyphs = renderer2D.shape_cache.get(font_obj, text) catch |err| {
+    const glyphs = font_obj.shapeText(text) catch |err| {
         std.log.err("Shape text failed: {s}", .{@errorName(err)});
-        return zlay.Pair{ 0, 0 };
+        return .{ 0, 0 };
     };
+    defer font_obj.deinitShapedText(glyphs);
 
     var cursor_x: f32 = 0.0;
     var max_line_width: f32 = 0.0;

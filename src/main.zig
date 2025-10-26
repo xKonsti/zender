@@ -33,7 +33,7 @@ pub fn main() !void {
         zen.drawing.drawRect(100, 400, 100, 100, .{
             // .corner_radius = .{16} ** 4,
             .color = .{ 200, 200, 200, 255 },
-            .rotation_deg = @floatFromInt(@mod(@divFloor(std.time.milliTimestamp() - now, 15), 360)),
+            .rotation_deg = @floatFromInt(@mod(@divFloor(std.time.milliTimestamp() - now, 10), 360)),
         });
         // Simple line
         const mouse_pos = zen.io.getMousePosition();
@@ -123,13 +123,18 @@ fn interface() void {
             });
 
             if (hov and zen.io.isMouseButtonDown(.RIGHT)) {
-                zlay.text("Zender is a ui drawing library", .{
-                    .id = .from(@src()),
-                    .font_size = 18,
-                    .text_color = .dark_300,
-                    .font_style = .bold,
+                if (zlay.open(.{
+                    .bg_color = .red,
                     .sizing = .{ .full, .default },
-                });
+                })) {
+                    defer zlay.close();
+                    zlay.text("Zender is a ui drawing library", .{
+                        .id = .from(@src()),
+                        .font_size = 18,
+                        .text_color = .dark_300,
+                        .font_style = .bold,
+                    });
+                }
 
                 // TODO: Why does this hover case the next panel to change background color from transparent to light_200?
 
@@ -140,16 +145,16 @@ fn interface() void {
                 })) {
                     defer zlay.close();
                 }
-                // zlay.text(
-                //     "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit",
-                //     .{
-                //         .id = .from(@src()),
-                //         .font_size = 16,
-                //         .font_style = .medium,
-                //         .text_color = .dark_300,
-                //         .sizing = .{ .full, .default },
-                //     },
-                // );
+
+                zlay.text(
+                    "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit",
+                    .{
+                        .id = .from(@src()),
+                        .font_size = 16,
+                        .font_style = .medium,
+                        .text_color = .dark_300,
+                    },
+                );
             }
         }
 
@@ -200,15 +205,15 @@ fn interface() void {
                 }
             }
 
-            // zlay.text(
-            //     "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit." ** 20,
-            //     .{
-            //         .font_size = 16,
-            //         .font_style = .medium,
-            //         .text_color = .dark_300,
-            //         .sizing = .{ .grow, .default },
-            //     },
-            // );
+            zlay.text(
+                "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit." ** 20,
+                .{
+                    .font_size = 16,
+                    .font_style = .medium,
+                    .text_color = .dark_300,
+                    .sizing = .{ .grow, .default },
+                },
+            );
         }
     }
 }

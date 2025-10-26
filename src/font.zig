@@ -9,39 +9,191 @@ const ft = @cImport({
 
 const harfb = @cImport({
     @cInclude("hb.h");
-
     @cDefine("HAVE_FREETYPE", "1");
     @cInclude("hb-ft.h");
 });
 
 var freetype_lib: ft.FT_Library = undefined;
+var font_cache: FontCache = undefined;
 
-fn loadFontFromMem(allocator: std.mem.Allocator, comptime font_data: []const u8, pixel_height: f32, dst: *Font) void {
-    // the times two is because of highdpi rendering
-    // TODO: on normal screens without highdpi this seems to also be fine but look at it in greater detail
-    dst.* = Font.fromMemory(allocator, font_data, pixel_height) catch |err| {
-        std.log.err("Font load failed: {s}", .{@errorName(err)});
-        unreachable;
-    };
-}
-
-pub var font_collection_geist: FontCollection = undefined;
-
-pub fn init(allocator: std.mem.Allocator) !void {
+pub fn init(allocator: Allocator) !void {
     const init_error = ft.FT_Init_FreeType(&freetype_lib);
     if (init_error != ft.FT_Err_Ok) {
         std.log.err("FreeType init failed: {d}", .{init_error});
+        return error.FreeTypeInitFailed;
     }
 
-    font_collection_geist = try .loadGeist(allocator);
+    font_cache = FontCache.init(allocator);
 }
 
 pub fn deinit() void {
+    font_cache.deinit();
     _ = ft.FT_Done_FreeType(freetype_lib);
-    font_collection_geist.deinit();
 }
+
+// =============================================================================
+// Public API
+// =============================================================================
+
+/// Font family enum - add more font families here
+pub const FontFamily = enum {
+    geist,
+    // Add more fonts as needed:
+    // roboto,
+    // inter,
+    // etc.
+
+    fn getFontData(self: FontFamily, style: FontStyle) []const u8 {
+        return switch (self) {
+            .geist => switch (style) {
+                .light => @embedFile("resources/Font/Geist/Geist-Light.ttf"),
+                .regular => @embedFile("resources/Font/Geist/Geist-Regular.ttf"),
+                .medium => @embedFile("resources/Font/Geist/Geist-Medium.ttf"),
+                .semibold => @embedFile("resources/Font/Geist/Geist-SemiBold.ttf"),
+                .bold => @embedFile("resources/Font/Geist/Geist-Bold.ttf"),
+                .extrabold => @embedFile("resources/Font/Geist/Geist-ExtraBold.ttf"),
+                .black => @embedFile("resources/Font/Geist/Geist-Black.ttf"),
+            },
+            // Add more font families:
+            // .roboto => switch (style) { ... },
+        };
+    }
+};
+
+pub const FontStyle = enum {
+    light,
+    regular,
+    medium,
+    semibold,
+    bold,
+    extrabold,
+    black,
+};
+
+/// Get a font with the specified family, style and size
+/// Fonts are cached, so repeated calls are fast
+pub fn getFont(family: FontFamily, style: FontStyle, size: f32) !*Font {
+    return font_cache.getOrLoad(family, style, size);
+}
+
+/// Preload commonly used fonts during startup (optional but recommended)
+pub fn preloadCommon(allocator: Allocator) !void {
+    _ = allocator;
+
+    const common_sizes = [_]f32{ 16, 24, 32, 48 };
+    const common_styles = [_]FontStyle{ .regular, .medium, .bold };
+
+    for (common_styles) |style| {
+        for (common_sizes) |size| {
+            _ = try getFont(.geist, style, size);
+        }
+    }
+}
+
+// =============================================================================
+// Font Cache - Internal
+// =============================================================================
+
+/// Cache key combining family, style and size
+const FontKey = struct {
+    family: FontFamily,
+    style: FontStyle,
+    size: u16,
+
+    pub fn hash(self: FontKey, hasher_seed: u64) u64 {
+        var hasher = std.hash.Wyhash.init(hasher_seed);
+        hasher.update(std.mem.asBytes(&self.family));
+        hasher.update(std.mem.asBytes(&self.style));
+        hasher.update(std.mem.asBytes(&self.size));
+        return hasher.final();
+    }
+
+    pub fn eql(self: FontKey, other: FontKey) bool {
+        return self.family == other.family and
+            self.style == other.style and
+            self.size == other.size;
+    }
+};
+
+const FontCache = struct {
+    allocator: Allocator,
+    fonts: std.HashMap(FontKey, Font, FontKeyContext, std.hash_map.default_max_load_percentage),
+    mutex: std.Thread.Mutex,
+
+    const FontKeyContext = struct {
+        pub fn hash(_: @This(), key: FontKey) u64 {
+            return key.hash(0);
+        }
+        pub fn eql(_: @This(), a: FontKey, b: FontKey) bool {
+            return a.eql(b);
+        }
+    };
+
+    fn init(allocator: Allocator) FontCache {
+        return .{
+            .allocator = allocator,
+            .fonts = std.HashMap(FontKey, Font, FontKeyContext, std.hash_map.default_max_load_percentage).init(allocator),
+            .mutex = .{},
+        };
+    }
+
+    fn deinit(self: *FontCache) void {
+        var it = self.fonts.valueIterator();
+        while (it.next()) |font| {
+            var f = font.*;
+            f.deinit();
+        }
+        self.fonts.deinit();
+    }
+
+    /// Get or load a font. Thread-safe.
+    fn getOrLoad(self: *FontCache, family: FontFamily, style: FontStyle, size: f32) !*Font {
+        // Quantize size to reduce cache entries
+        const quantized_size = quantizeSize(size);
+        const key = FontKey{ .family = family, .style = style, .size = quantized_size };
+
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        // Check if already loaded
+        if (self.fonts.getPtr(key)) |font| {
+            return font;
+        }
+
+        // Load new font
+        const font_data = family.getFontData(style);
+        const font = try Font.fromMemory(self.allocator, font_data, @floatFromInt(quantized_size));
+
+        try self.fonts.put(key, font);
+        return self.fonts.getPtr(key).?;
+    }
+
+    /// Quantize font size to standard sizes to reduce cache entries
+    fn quantizeSize(size: f32) u16 {
+        const size_int: u16 = @intFromFloat(@round(size));
+        return switch (size_int) {
+            0...16 => 16,
+            17...20 => 20,
+            21...24 => 24,
+            25...28 => 28,
+            29...32 => 32,
+            33...40 => 40,
+            41...48 => 48,
+            49...56 => 56,
+            57...64 => 64,
+            65...72 => 72,
+            73...96 => 96,
+            else => 96,
+        };
+    }
+};
+
+// =============================================================================
+// Font & Related Types
+// =============================================================================
+
 /// Represents a rendered glyph bitmap (8-bit grayscale).
-/// must be freed with `deinit`.
+/// Must be freed with `deinit`.
 pub const GlyphBitmap = struct {
     alloc: Allocator,
     pixels: []u8,
@@ -65,8 +217,7 @@ pub const ShapedGlyph = struct {
     y_offset: f32,
     /// maps to byte index in the original text
     cluster: u32,
-
-    bearing_x: f32, // horizontal left-breaing in pixel units
+    bearing_x: f32, // horizontal left-bearing in pixel units
     glyph_width: f32, // glyph bounding width in pixel units
 };
 
@@ -79,9 +230,9 @@ pub const Font = struct {
     atlas: FontAtlas,
     units_per_em: u16,
 
-    pub fn fromMemory(allocator: Allocator, comptime font_data: []const u8, pixel_height: f32) !Font {
+    pub fn fromMemory(allocator: Allocator, font_data: []const u8, pixel_height: f32) !Font {
         const now = std.time.milliTimestamp();
-        defer std.debug.print("Font init took {d}ms\n", .{std.time.milliTimestamp() - now});
+        defer std.debug.print("Font init took {d}ms for size {d}\n", .{ std.time.milliTimestamp() - now, pixel_height });
 
         var hasher = std.hash.Wyhash.init(0);
         hasher.update(std.mem.asBytes(&pixel_height));
@@ -180,7 +331,6 @@ pub const Font = struct {
                 .x_offset = @as(f32, @floatFromInt(pos.x_offset)) / 64.0,
                 .y_offset = @as(f32, @floatFromInt(pos.y_offset)) / 64.0,
                 .cluster = info.cluster,
-
                 .bearing_x = bearing_x_raw,
                 .glyph_width = glyph_width_raw,
             };
@@ -203,16 +353,16 @@ pub const Font = struct {
             ft.FT_LOAD_DEFAULT | ft.FT_LOAD_RENDER,
         );
         if (error_code != ft.FT_Err_Ok) {
-            return error.FreeTypeLoadGlyphFailed; // Better error name
+            return error.FreeTypeLoadGlyphFailed;
         }
 
         const bitmap = &face.*.glyph.*.bitmap;
 
         const pixels_size = @as(usize, @intCast(@as(c_int, @intCast(bitmap.rows)) * bitmap.pitch));
         const pixels = try self.alloc.alloc(u8, pixels_size);
-        errdefer self.alloc.free(pixels); // ✅ Fixed: was self.allocator.free
+        errdefer self.alloc.free(pixels);
 
-        if (pixels_size > 0) { // ✅ Guard against empty bitmaps
+        if (pixels_size > 0) {
             @memcpy(pixels, bitmap.buffer[0..pixels_size]);
         }
 
@@ -227,6 +377,10 @@ pub const Font = struct {
         };
     }
 };
+
+// =============================================================================
+// Font Atlas
+// =============================================================================
 
 const Rect = struct {
     x: u32, // position in atlas (padded rect.x where bitmap starts)
@@ -257,14 +411,12 @@ pub const FontAtlas = struct {
         const num_glyphs: usize = @intCast(font.ft_face.*.num_glyphs);
 
         var glyphs_map = std.AutoHashMap(u32, Rect).init(alloc);
-        // Only deinit the map on error (we return it on success).
         errdefer glyphs_map.deinit();
 
         try glyphs_map.ensureTotalCapacity(@intCast(num_glyphs));
 
         var pack = try std.ArrayList(packGlyph).initCapacity(alloc, num_glyphs);
         defer {
-            // free bitmaps and the list on both success and error; bitmaps are no longer needed after copying
             for (pack.items) |*pg| pg.bmp.deinit();
             pack.deinit(alloc);
         }
@@ -279,7 +431,6 @@ pub const FontAtlas = struct {
         for (0..num_glyphs) |gi| {
             var glyph = try font.rasterizeGlyph(gi);
             if (glyph.width == 0 or glyph.height == 0) {
-                std.debug.print("Skipping empty glyph {d}\n", .{gi});
                 // Keep an entry so we know its bearings and advance, but no pixels
                 glyphs_map.putAssumeCapacityNoClobber(@intCast(gi), .{
                     .x = 0,
@@ -309,7 +460,6 @@ pub const FontAtlas = struct {
             const rect_x = cursor_x + PADDING;
             const rect_y = atlas_h + PADDING;
 
-            // store rect with bearings (left/top) so rendering code can place glyphs on baseline
             glyphs_map.putAssumeCapacityNoClobber(@intCast(gi), .{
                 .x = rect_x,
                 .y = rect_y,
@@ -319,7 +469,6 @@ pub const FontAtlas = struct {
                 .top = glyph.top,
             });
 
-            // keep the actual bitmap around so we can copy it into the atlas
             pack.appendAssumeCapacity(.{
                 .index = @intCast(gi),
                 .bmp = glyph,
@@ -340,7 +489,6 @@ pub const FontAtlas = struct {
 
         // Allocate and clear pixel buffer
         var pixel = try alloc.alloc(u8, @as(usize, atlas_w) * @as(usize, atlas_h));
-        // free on error
         errdefer alloc.free(pixel);
         @memset(pixel, 0);
 
@@ -360,9 +508,6 @@ pub const FontAtlas = struct {
             }
         }
 
-        // INFO : Just for debug purposes
-        // try writeToBMP(alloc, atlas_w, atlas_h, pixel);
-
         return .{
             .alloc = alloc,
             .width = atlas_w,
@@ -379,539 +524,5 @@ pub const FontAtlas = struct {
 
     pub fn getGlyphDimensions(self: FontAtlas, glyph_index: u32) Rect {
         return self.glyphs_map.get(glyph_index).?;
-    }
-
-    fn writeToBMP(alloc: Allocator, width: u32, height: u32, pixels: []u8) !void {
-        const row_stride: usize = ((@as(usize, width) * 3 + 3) / 4) * 4;
-        const file_size = 14 + 40 + row_stride * @as(usize, height);
-
-        const file = try std.fs.cwd().createFile("font_atlas.bmp", .{});
-        defer file.close();
-
-        // BMP file header (14 bytes)
-        const file_header = [_]u8{
-            'B',                                         'M',
-            @as(u8, @intCast(file_size & 0xFF)),         @as(u8, @intCast((file_size >> 8) & 0xFF)),
-            @as(u8, @intCast((file_size >> 16) & 0xFF)), @as(u8, @intCast((file_size >> 24) & 0xFF)),
-            0,                                           0,
-            0,                                           0,
-            54,                                          0,
-            0,                                           0,
-        };
-
-        // DIB header (40 bytes, BITMAPINFOHEADER)
-        const dib_header = [_]u8{
-            40,                               0,                                       0,                                        0,
-            @as(u8, @intCast(width & 0xFF)),  @as(u8, @intCast((width >> 8) & 0xFF)),  @as(u8, @intCast((width >> 16) & 0xFF)),  @as(u8, @intCast((width >> 24) & 0xFF)),
-            @as(u8, @intCast(height & 0xFF)), @as(u8, @intCast((height >> 8) & 0xFF)), @as(u8, @intCast((height >> 16) & 0xFF)), @as(u8, @intCast((height >> 24) & 0xFF)),
-            1,                                0,                                       24,                                       0,
-            0,                                0,                                       0,                                        0,
-            0,                                0,                                       0,                                        0,
-            0,                                0,                                       0,                                        0,
-            0,                                0,                                       0,                                        0,
-            0,                                0,                                       0,                                        0,
-            0,                                0,                                       0,                                        0,
-        };
-
-        try file.writeAll(&file_header);
-        try file.writeAll(&dib_header);
-
-        // --- FIXED ROW-WRITE WITH PADDING ---
-        var rgb_row = try alloc.alloc(u8, row_stride);
-        defer alloc.free(rgb_row);
-
-        for (0..height) |y| {
-            const src_y = height - 1 - y; // BMP wants bottom-to-top
-            var idx: usize = 0;
-            for (0..width) |x| {
-                const gray = pixels[src_y * width + x];
-                rgb_row[idx + 0] = gray; // B
-                rgb_row[idx + 1] = gray; // G
-                rgb_row[idx + 2] = gray; // R
-                idx += 3;
-            }
-            // pad to 4-byte boundary
-            while (idx < row_stride) : (idx += 1) {
-                rgb_row[idx] = 0;
-            }
-            try file.writeAll(rgb_row[0..row_stride]);
-        }
-    }
-
-    fn writeToBMP2(alloc: Allocator, max_height: u32, glyphs: []GlyphBitmap) !void {
-        // Step 2: Use a square atlas with row-based packing
-        const atlas_width: u32 = 1024 * 2; // Adjust as needed (power of 2 recommended)
-        var atlas_height: u32 = max_height;
-        var current_x: u32 = 0;
-        var current_y: u32 = 0;
-        var row_height: u32 = 0;
-
-        for (glyphs) |g| {
-            const w: u32 = @intCast(g.width);
-            const h: u32 = @intCast(g.height);
-            if (current_x + w > atlas_width) {
-                current_x = 0;
-                current_y += row_height;
-                row_height = 0;
-            }
-            current_x += w;
-            row_height = @max(row_height, h);
-        }
-        atlas_height = current_y + row_height; // Final height
-        if (atlas_height > atlas_width) {
-            return error.AtlasTooSmall; // Increase atlas_width and retry
-        }
-        std.debug.print("Final atlas size: {d}x{d}\n", .{ atlas_width, atlas_height });
-
-        // Step 3: Create atlas pixels
-        var atlas_pixels = try alloc.alloc(u8, atlas_width * atlas_height);
-        defer alloc.free(atlas_pixels);
-        @memset(atlas_pixels, 0);
-
-        current_x = 0;
-        current_y = 0;
-        row_height = 0;
-        for (glyphs) |g| {
-            const w: u32 = @intCast(g.width);
-            const h: u32 = @intCast(g.height);
-            if (current_x + w > atlas_width) {
-                current_x = 0;
-                current_y += row_height;
-                row_height = 0;
-            }
-            for (0..@as(usize, @intCast(g.height))) |row| {
-                const src_start = row * @as(usize, @intCast(g.pitch));
-                const src = g.pixels[src_start .. src_start + @as(usize, @intCast(g.width))];
-                const dst_offset = (current_y + @as(u32, @intCast(row))) * @as(usize, atlas_width) + @as(usize, current_x);
-                @memcpy(atlas_pixels[dst_offset .. dst_offset + src.len], src);
-            }
-            current_x += w;
-            row_height = @max(row_height, h);
-        }
-
-        // Step 4: Write BMP file
-        const file = try std.fs.cwd().createFile("font_atlas.bmp", .{});
-        defer file.close();
-
-        // BMP file header (14 bytes)
-        const file_size = 14 + 40 + (atlas_width * atlas_height * 3);
-        const file_header = [_]u8{
-            'B',                                         'M',
-            @as(u8, @intCast(file_size & 0xFF)),         @as(u8, @intCast((file_size >> 8) & 0xFF)),
-            @as(u8, @intCast((file_size >> 16) & 0xFF)), @as(u8, @intCast((file_size >> 24) & 0xFF)),
-            0,                                           0,
-            0,                                           0,
-            54,                                          0,
-            0,                                           0,
-        };
-
-        // DIB header (40 bytes, BITMAPINFOHEADER)
-        const dib_header = [_]u8{
-            40,                                     0,                                             0,                                              0,
-            @as(u8, @intCast(atlas_width & 0xFF)),  @as(u8, @intCast((atlas_width >> 8) & 0xFF)),  @as(u8, @intCast((atlas_width >> 16) & 0xFF)),  @as(u8, @intCast((atlas_width >> 24) & 0xFF)),
-            @as(u8, @intCast(atlas_height & 0xFF)), @as(u8, @intCast((atlas_height >> 8) & 0xFF)), @as(u8, @intCast((atlas_height >> 16) & 0xFF)), @as(u8, @intCast((atlas_height >> 24) & 0xFF)),
-            1,                                      0,                                             24,                                             0,
-            0,                                      0,                                             0,                                              0,
-            0,                                      0,                                             0,                                              0,
-            0,                                      0,                                             0,                                              0,
-            0,                                      0,                                             0,                                              0,
-            0,                                      0,                                             0,                                              0,
-            0,                                      0,                                             0,                                              0,
-        };
-
-        try file.writeAll(&file_header);
-        try file.writeAll(&dib_header);
-
-        // Convert grayscale to RGB, flip Y for BMP
-        var rgb_pixels = try alloc.alloc(u8, atlas_width * atlas_height * 3);
-        defer alloc.free(rgb_pixels);
-        for (0..atlas_height) |y| {
-            for (0..atlas_width) |x| {
-                const gray = atlas_pixels[(atlas_height - 1 - y) * atlas_width + x];
-                const idx = (y * atlas_width + x) * 3;
-                rgb_pixels[idx + 0] = gray; // B
-                rgb_pixels[idx + 1] = gray; // G
-                rgb_pixels[idx + 2] = gray; // R
-            }
-        }
-        try file.writeAll(rgb_pixels);
-    }
-};
-
-pub const FontStyle = enum {
-    light,
-    regular,
-    medium,
-    semibold,
-    bold,
-    extrabold,
-    black,
-};
-
-pub const FontCollection = struct {
-    font_light_16: Font,
-    font_light_24: Font,
-    font_light_32: Font,
-    font_light_48: Font,
-    font_light_64: Font,
-    font_light_72: Font,
-    font_light_96: Font,
-    font_regular_16: Font,
-    font_regular_24: Font,
-    font_regular_32: Font,
-    font_regular_48: Font,
-    font_regular_64: Font,
-    font_regular_72: Font,
-    font_regular_96: Font,
-    font_medium_16: Font,
-    font_medium_24: Font,
-    font_medium_32: Font,
-    font_medium_48: Font,
-    font_medium_64: Font,
-    font_medium_72: Font,
-    font_medium_96: Font,
-    font_semibold_16: Font,
-    font_semibold_24: Font,
-    font_semibold_32: Font,
-    font_semibold_48: Font,
-    font_semibold_64: Font,
-    font_semibold_72: Font,
-    font_semibold_96: Font,
-    font_bold_16: Font,
-    font_bold_24: Font,
-    font_bold_32: Font,
-    font_bold_48: Font,
-    font_bold_64: Font,
-    font_bold_72: Font,
-    font_bold_96: Font,
-    font_extrabold_16: Font,
-    font_extrabold_24: Font,
-    font_extrabold_32: Font,
-    font_extrabold_48: Font,
-    font_extrabold_64: Font,
-    font_extrabold_72: Font,
-    font_extrabold_96: Font,
-    font_black_16: Font,
-    font_black_24: Font,
-    font_black_32: Font,
-    font_black_48: Font,
-    font_black_64: Font,
-    font_black_72: Font,
-    font_black_96: Font,
-
-    pub fn getFont(self: FontCollection, font_size: f32, style: FontStyle) Font {
-        const nearest_font_size = nearestFontSize(@intFromFloat(font_size));
-        return switch (style) {
-            .light => return switch (nearest_font_size) {
-                16 => self.font_light_16,
-                24 => self.font_light_24,
-                32 => self.font_light_32,
-                48 => self.font_light_48,
-                64 => self.font_light_64,
-                72 => self.font_light_72,
-                96 => self.font_light_96,
-                else => unreachable,
-            },
-            .regular => switch (nearest_font_size) {
-                16 => self.font_regular_16,
-                24 => self.font_regular_24,
-                32 => self.font_regular_32,
-                48 => self.font_regular_48,
-                64 => self.font_regular_64,
-                72 => self.font_regular_72,
-                96 => self.font_regular_96,
-                else => unreachable,
-            },
-            .medium => switch (nearest_font_size) {
-                16 => self.font_medium_16,
-                24 => self.font_medium_24,
-                32 => self.font_medium_32,
-                48 => self.font_medium_48,
-                64 => self.font_medium_64,
-                72 => self.font_medium_72,
-                96 => self.font_medium_96,
-                else => unreachable,
-            },
-            .semibold => switch (nearest_font_size) {
-                16 => self.font_semibold_16,
-                24 => self.font_semibold_24,
-                32 => self.font_semibold_32,
-                48 => self.font_semibold_48,
-                64 => self.font_semibold_64,
-                72 => self.font_semibold_72,
-                96 => self.font_semibold_96,
-                else => unreachable,
-            },
-            .bold => switch (nearest_font_size) {
-                16 => self.font_bold_16,
-                24 => self.font_bold_24,
-                32 => self.font_bold_32,
-                48 => self.font_bold_48,
-                64 => self.font_bold_64,
-                72 => self.font_bold_72,
-                96 => self.font_bold_96,
-                else => unreachable,
-            },
-            .extrabold => switch (nearest_font_size) {
-                16 => self.font_extrabold_16,
-                24 => self.font_extrabold_24,
-                32 => self.font_extrabold_32,
-                48 => self.font_extrabold_48,
-                64 => self.font_extrabold_64,
-                72 => self.font_extrabold_72,
-                96 => self.font_extrabold_96,
-                else => unreachable,
-            },
-            .black => switch (nearest_font_size) {
-                16 => self.font_black_16,
-                24 => self.font_black_24,
-                32 => self.font_black_32,
-                48 => self.font_black_48,
-                64 => self.font_black_64,
-                72 => self.font_black_72,
-                96 => self.font_black_96,
-                else => unreachable,
-            },
-        };
-    }
-
-    fn nearestFontSize(font_size: u16) u16 {
-        switch (font_size) {
-            0...16 => return 16,
-            17...24 => return 24,
-            25...32 => return 32,
-            33...48 => return 48,
-            49...64 => return 64,
-            65...72 => return 72,
-            73...96 => return 96,
-            else => return 96,
-        }
-    }
-
-    pub fn deinit(self: *FontCollection) void {
-        self.font_light_16.deinit();
-        self.font_light_24.deinit();
-        self.font_light_32.deinit();
-        self.font_light_48.deinit();
-        self.font_light_64.deinit();
-        self.font_light_72.deinit();
-        self.font_light_96.deinit();
-        self.font_regular_16.deinit();
-        self.font_regular_24.deinit();
-        self.font_regular_32.deinit();
-        self.font_regular_48.deinit();
-        self.font_regular_64.deinit();
-        self.font_regular_72.deinit();
-        self.font_regular_96.deinit();
-        self.font_medium_16.deinit();
-        self.font_medium_24.deinit();
-        self.font_medium_32.deinit();
-        self.font_medium_48.deinit();
-        self.font_medium_64.deinit();
-        self.font_medium_72.deinit();
-        self.font_medium_96.deinit();
-        self.font_semibold_16.deinit();
-        self.font_semibold_24.deinit();
-        self.font_semibold_32.deinit();
-        self.font_semibold_48.deinit();
-        self.font_semibold_64.deinit();
-        self.font_semibold_72.deinit();
-        self.font_semibold_96.deinit();
-        self.font_bold_16.deinit();
-        self.font_bold_24.deinit();
-        self.font_bold_32.deinit();
-        self.font_bold_48.deinit();
-        self.font_bold_64.deinit();
-        self.font_bold_72.deinit();
-        self.font_bold_96.deinit();
-        self.font_extrabold_16.deinit();
-        self.font_extrabold_24.deinit();
-        self.font_extrabold_32.deinit();
-        self.font_extrabold_48.deinit();
-        self.font_extrabold_64.deinit();
-        self.font_extrabold_72.deinit();
-        self.font_extrabold_96.deinit();
-        self.font_black_16.deinit();
-        self.font_black_24.deinit();
-        self.font_black_32.deinit();
-        self.font_black_48.deinit();
-        self.font_black_64.deinit();
-        self.font_black_72.deinit();
-        self.font_black_96.deinit();
-    }
-
-    fn loadGeist(allocator: std.mem.Allocator) !FontCollection {
-        var thread_pool: std.Thread.Pool = undefined;
-        try std.Thread.Pool.init(&thread_pool, .{
-            .allocator = allocator,
-        });
-
-        var font_light_16: Font = undefined;
-        var font_light_24: Font = undefined;
-        var font_light_32: Font = undefined;
-        var font_light_48: Font = undefined;
-        var font_light_64: Font = undefined;
-        var font_light_72: Font = undefined;
-        var font_light_96: Font = undefined;
-        var font_regular_16: Font = undefined;
-        var font_regular_24: Font = undefined;
-        var font_regular_32: Font = undefined;
-        var font_regular_48: Font = undefined;
-        var font_regular_64: Font = undefined;
-        var font_regular_72: Font = undefined;
-        var font_regular_96: Font = undefined;
-        var font_medium_16: Font = undefined;
-        var font_medium_24: Font = undefined;
-        var font_medium_32: Font = undefined;
-        var font_medium_48: Font = undefined;
-        var font_medium_64: Font = undefined;
-        var font_medium_72: Font = undefined;
-        var font_medium_96: Font = undefined;
-        var font_semibold_16: Font = undefined;
-        var font_semibold_24: Font = undefined;
-        var font_semibold_32: Font = undefined;
-        var font_semibold_48: Font = undefined;
-        var font_semibold_64: Font = undefined;
-        var font_semibold_72: Font = undefined;
-        var font_semibold_96: Font = undefined;
-        var font_bold_16: Font = undefined;
-        var font_bold_24: Font = undefined;
-        var font_bold_32: Font = undefined;
-        var font_bold_48: Font = undefined;
-        var font_bold_64: Font = undefined;
-        var font_bold_72: Font = undefined;
-        var font_bold_96: Font = undefined;
-        var font_extrabold_16: Font = undefined;
-        var font_extrabold_24: Font = undefined;
-        var font_extrabold_32: Font = undefined;
-        var font_extrabold_48: Font = undefined;
-        var font_extrabold_64: Font = undefined;
-        var font_extrabold_72: Font = undefined;
-        var font_extrabold_96: Font = undefined;
-        var font_black_16: Font = undefined;
-        var font_black_24: Font = undefined;
-        var font_black_32: Font = undefined;
-        var font_black_48: Font = undefined;
-        var font_black_64: Font = undefined;
-        var font_black_72: Font = undefined;
-        var font_black_96: Font = undefined;
-
-        const font_data_light = @embedFile("resources/Font/Geist/Geist-Light.ttf");
-        const font_data_regular = @embedFile("resources/Font/Geist/Geist-Regular.ttf");
-        const font_data_medium = @embedFile("resources/Font/Geist/Geist-Medium.ttf");
-        const font_data_semibold = @embedFile("resources/Font/Geist/Geist-SemiBold.ttf");
-        const font_data_bold = @embedFile("resources/Font/Geist/Geist-Bold.ttf");
-        const font_data_extrabold = @embedFile("resources/Font/Geist/Geist-ExtraBold.ttf");
-        const font_data_black = @embedFile("resources/Font/Geist/Geist-Black.ttf");
-
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_light, 16, &font_light_16 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_light, 24, &font_light_24 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_light, 32, &font_light_32 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_light, 48, &font_light_48 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_light, 64, &font_light_64 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_light, 72, &font_light_72 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_light, 96, &font_light_96 });
-
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_regular, 16, &font_regular_16 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_regular, 24, &font_regular_24 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_regular, 32, &font_regular_32 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_regular, 48, &font_regular_48 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_regular, 64, &font_regular_64 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_regular, 72, &font_regular_72 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_regular, 96, &font_regular_96 });
-
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_medium, 16, &font_medium_16 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_medium, 24, &font_medium_24 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_medium, 32, &font_medium_32 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_medium, 48, &font_medium_48 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_medium, 64, &font_medium_64 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_medium, 72, &font_medium_72 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_medium, 96, &font_medium_96 });
-
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_semibold, 16, &font_semibold_16 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_semibold, 24, &font_semibold_24 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_semibold, 32, &font_semibold_32 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_semibold, 48, &font_semibold_48 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_semibold, 64, &font_semibold_64 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_semibold, 72, &font_semibold_72 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_semibold, 96, &font_semibold_96 });
-
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_bold, 16, &font_bold_16 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_bold, 24, &font_bold_24 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_bold, 32, &font_bold_32 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_bold, 48, &font_bold_48 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_bold, 64, &font_bold_64 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_bold, 72, &font_bold_72 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_bold, 96, &font_bold_96 });
-
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_extrabold, 16, &font_extrabold_16 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_extrabold, 24, &font_extrabold_24 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_extrabold, 32, &font_extrabold_32 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_extrabold, 48, &font_extrabold_48 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_extrabold, 64, &font_extrabold_64 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_extrabold, 72, &font_extrabold_72 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_extrabold, 96, &font_extrabold_96 });
-
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_black, 16, &font_black_16 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_black, 24, &font_black_24 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_black, 32, &font_black_32 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_black, 48, &font_black_48 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_black, 64, &font_black_64 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_black, 72, &font_black_72 });
-        try thread_pool.spawn(loadFontFromMem, .{ allocator, font_data_black, 96, &font_black_96 });
-
-        thread_pool.deinit();
-
-        return FontCollection{
-            .font_light_16 = font_light_16,
-            .font_light_24 = font_light_24,
-            .font_light_32 = font_light_32,
-            .font_light_48 = font_light_48,
-            .font_light_64 = font_light_64,
-            .font_light_72 = font_light_72,
-            .font_light_96 = font_light_96,
-            .font_regular_16 = font_regular_16,
-            .font_regular_24 = font_regular_24,
-            .font_regular_32 = font_regular_32,
-            .font_regular_48 = font_regular_48,
-            .font_regular_64 = font_regular_64,
-            .font_regular_72 = font_regular_72,
-            .font_regular_96 = font_regular_96,
-            .font_medium_16 = font_medium_16,
-            .font_medium_24 = font_medium_24,
-            .font_medium_32 = font_medium_32,
-            .font_medium_48 = font_medium_48,
-            .font_medium_64 = font_medium_64,
-            .font_medium_72 = font_medium_72,
-            .font_medium_96 = font_medium_96,
-            .font_semibold_16 = font_semibold_16,
-            .font_semibold_24 = font_semibold_24,
-            .font_semibold_32 = font_semibold_32,
-            .font_semibold_48 = font_semibold_48,
-            .font_semibold_64 = font_semibold_64,
-            .font_semibold_72 = font_semibold_72,
-            .font_semibold_96 = font_semibold_96,
-            .font_bold_16 = font_bold_16,
-            .font_bold_24 = font_bold_24,
-            .font_bold_32 = font_bold_32,
-            .font_bold_48 = font_bold_48,
-            .font_bold_64 = font_bold_64,
-            .font_bold_72 = font_bold_72,
-            .font_bold_96 = font_bold_96,
-            .font_extrabold_16 = font_extrabold_16,
-            .font_extrabold_24 = font_extrabold_24,
-            .font_extrabold_32 = font_extrabold_32,
-            .font_extrabold_48 = font_extrabold_48,
-            .font_extrabold_64 = font_extrabold_64,
-            .font_extrabold_72 = font_extrabold_72,
-            .font_extrabold_96 = font_extrabold_96,
-            .font_black_16 = font_black_16,
-            .font_black_24 = font_black_24,
-            .font_black_32 = font_black_32,
-            .font_black_48 = font_black_48,
-            .font_black_64 = font_black_64,
-            .font_black_72 = font_black_72,
-            .font_black_96 = font_black_96,
-        };
     }
 };

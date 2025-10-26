@@ -5,9 +5,10 @@ const Allocator = std.mem.Allocator;
 pub const c = @import("gl");
 const stb_image = @import("image.zig").c;
 
+const font_mod = @import("font.zig");
 const Font = @import("font.zig").Font;
 const FontAtlas = @import("font.zig").FontAtlas;
-const FontCollection = @import("font.zig").FontCollection;
+const FontFamily = @import("font.zig").FontFamily;
 const FontStyle = @import("font.zig").FontStyle;
 const zlay = @import("zlayout");
 
@@ -466,11 +467,14 @@ pub const Renderer2D = struct {
         self.rect_count += 1;
     }
 
-    pub fn drawText(self: *Renderer2D, window_scale: [2]f32, font_collection: FontCollection, text: []const u8, x: f32, y: f32, size: f32, style: FontStyle, text_color: [4]u8) !void {
+    pub fn drawText(self: *Renderer2D, window_scale: [2]f32, font_family: FontFamily, text: []const u8, x: f32, y: f32, size: f32, style: FontStyle, text_color: [4]u8) !void {
         // const now = std.time.milliTimestamp();
         // defer std.debug.print("drawText took {d}ms\n", .{std.time.milliTimestamp() - now});
 
-        const font = font_collection.getFont(size * window_scale[1], style);
+        const font = font_mod.getFont(font_family, style, size * window_scale[1]) catch |err| {
+            std.log.err("Failed to get font: {s}", .{@errorName(err)});
+            return;
+        };
         if (self.current_texture_id == null or self.current_font_id == null or self.current_font_id.? != font.id) {
             self.flush();
             const tex = self.getOrCreateAtlasTexture(font.atlas, font.id);
@@ -481,7 +485,7 @@ pub const Renderer2D = struct {
             self.current_image_id = null;
         }
 
-        const glyphs = try self.shape_cache.get(font, text);
+        const glyphs = try self.shape_cache.get(font.*, text);
 
         // scale between the atlas rasterization size (font.pixel_height) and requested size
         const scale = size / font.pixel_height;
