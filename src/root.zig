@@ -1,3 +1,49 @@
+//! minimal example:
+//! ```zig
+//! const std = @import("std");
+//! const zen = @import("zender");
+//! const zlay = zen.layout;
+//!
+//! pub fn main() !void {
+//!     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+//!     defer _ = gpa.deinit();
+//!     const allocator = gpa.allocator();
+//!
+//!     try zen.core.init(allocator, .{ 1200, 800 }, "App title", .{});
+//!     defer zen.core.deinit();
+//!
+//!     while (!zen.core.shouldClose()) {
+//!         zen.core.beginFrame();
+//!
+//!         zlay.beginLayout();
+//!         if (zlay.open(.{
+//!             .sizing = .{ .full, .full },
+//!             .bg_color = .light_100,
+//!             .padding = .all(8),
+//!             .layout = .flex(.{
+//!                 .gap = 8,
+//!                 .alignment = .center,
+//!             }),
+//!         })) {
+//!             defer zlay.close();
+//!
+//!             zlay.text("Hello, world!", .{
+//!                 .font_size = 46,
+//!                 .text_color = .dark_300,
+//!                 .font_style = .bold,
+//!             });
+//!         }
+//!
+//!
+//!         zen.drawing.start();
+//!         zen.drawing.drawLayout(zlay.endLayout());
+//!         zen.drawing.end();
+//!
+//!         zen.core.endFrame();
+//!     }
+//! }
+//! ```
+//!
 const std = @import("std");
 const assert = std.debug.assert;
 
