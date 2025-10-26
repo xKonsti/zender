@@ -98,22 +98,25 @@ void solid() {
     float softness_outer = fwidth(dist_outer);
     float softness_inner = fwidth(dist_inner);
 
-    // Border alpha = inside outer, outside inner
-    float alpha_border = smoothstep(0.0, softness_outer, -dist_outer) *
-            smoothstep(0.0, softness_inner, dist_inner);
+    // Outer coverage (1 inside outer rect, 0 outside, symmetric fade)
+    float alpha_outer = clamp(-dist_outer / softness_outer + 0.5, 0.0, 1.0);
 
-    // Fill alpha = inside inner
-    float alpha_fill = 1.0 - smoothstep(0.0, softness_inner, dist_inner);
+    // Inner coverage for fill (1 inside inner rect, 0 outside)
+    float alpha_fill = clamp(-dist_inner / softness_inner + 0.5, 0.0, 1.0);
 
-    // Discard fragments outside outer rectangle
-    if (dist_outer > 0.0) discard;
+    // Coverage for border region (1 outside inner but inside outer)
+    float alpha_border_region = clamp(dist_inner / softness_inner + 0.5, 0.0, 1.0);
+    float alpha_border = alpha_outer * alpha_border_region;
 
-    // Combine border and fill to avoid 1-pixel gaps
-    float alpha = clamp(alpha_fill * rect_color.a + alpha_border * border_color.a, 0.0, 1.0);
-    float mix_factor = (alpha > 0.0) ? (alpha_border / alpha) : 0.0;
+    // Combine border and fill with opacity
+    float contrib_fill = alpha_fill * rect_color.a;
+    float contrib_border = alpha_border * border_color.a;
+    float alpha = clamp(contrib_fill + contrib_border, 0.0, 1.0);
+
+    float mix_factor = (alpha > 0.0) ? contrib_border / alpha : 0.0;
 
     out_color = vec4(
-            mix(color.rgb, border_color.rgb, mix_factor),
+            mix(rect_color.rgb, border_color.rgb, mix_factor),
             alpha
         );
 }

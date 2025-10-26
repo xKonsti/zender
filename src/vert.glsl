@@ -18,10 +18,8 @@ flat out float corner_radius;
 flat out vec4 border_width;
 flat out vec4 border_color;
 flat out int v_use_texture;
-
 flat out float cos_rot;
 flat out float sin_rot;
-
 out vec2 v_uv;
 
 uniform vec4 window_params; // xy = window size, zw = window scale
@@ -41,8 +39,12 @@ void main() {
 
     mat2 rot = mat2(c, -s, s, c);
 
+    // Conditionally expand bounding box for solids only (use_texture = 0)
+    float aa_padding = (use_texture == 0) ? 2.0 / min(window_scale.x, window_scale.y) : 0.0;
+    vec2 padded_size = inst_size + vec2(aa_padding);
+
     // Position the quad's vertex: apply rotation around center in unscaled coords
-    vec2 local_pos = base_pos * inst_size;
+    vec2 local_pos = base_pos * padded_size; // Use padded size for vertex positions
     vec2 rotated = rot * local_pos;
     vec2 final_pos_unscaled = rotated + rect_center_unscaled;
 
@@ -50,7 +52,7 @@ void main() {
     vec2 final_pos_scaled = final_pos_unscaled * window_scale;
 
     vec2 ndc = (final_pos_scaled / buffer_size) * 2.0 - 1.0;
-    ndc.y = -ndc.y; // Flip Y for top-left origin in api
+    ndc.y = -ndc.y; // Flip Y for top-left origin in API
     gl_Position = vec4(ndc, 0.0, 1.0);
 
     // Pass instance data to fragment shader (in buffer coordinates)
@@ -58,10 +60,8 @@ void main() {
     // Convert to GL framebuffer coordinate space where origin is top-left
     rect_center.y = buffer_size.y - rect_center.y;
 
-    // IMPORTANT: pass the unrotated rect size (in buffer coordinates) to the fragment shader.
-    // The fragment shader applies an inverse rotation to the fragment position and expects
-    // the rectangle half-size to be the original, unrotated half-size.
-    rect_size = inst_size * window_scale;
+    // Pass the ORIGINAL (unpadded) rect size to fragment shader
+    rect_size = inst_size * window_scale; // Unrotated size for SDF computation
 
     rect_color = inst_color;
 
@@ -73,7 +73,7 @@ void main() {
 
     v_use_texture = use_texture;
 
-    // UV mapping (base_pos in [-0.5, 0.5] → 0..1)
-    vec2 quad_uv = base_pos + 0.5;
+    // UV mapping: map base_pos [-0.5, 0.5] to [0, 1] for text/image, adjusted for padding
+    vec2 quad_uv = (base_pos + 0.5) * (inst_size / padded_size);
     v_uv = quad_uv * uv_data.zw + uv_data.xy;
 }

@@ -61,7 +61,7 @@ fn addDependencies(
     // exe.root_module.addImport("freetype_c", freetype.module("freetype_mod"));
 
     mod.addCSourceFile(.{
-        .file = b.path("lib/stb_image/stb_image_impl.c"),
+        .file = b.path("lib/stb/stb_image_impl.c"),
         .flags = &[_][]const u8{"-std=c99"},
     });
 
