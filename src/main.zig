@@ -28,6 +28,15 @@ pub fn main() !void {
 
         zen.drawing.start();
         zen.drawing.drawLayout(interface_cmds);
+        // zen.drawing.drawRectOutline(100, 400, 100, 100, .{
+        //     .color = .{ 240, 0, 0, 255 },
+        //     .stroke_width = 16.0,
+        //     .corner_radius = .{40} ** 4,
+        // });
+        // zen.drawing.drawCircleOutline(500, 500, 110, .{
+        //     .color = .{ 240, 0, 0, 255 },
+        //     .stroke_width = 16.0,
+        // });
         // zen.drawing.drawRect(100, 400, 100, 100, .{
         //     // .corner_radius = .{16} ** 4,
         //     .color = .{ 200, 200, 200, 255 },

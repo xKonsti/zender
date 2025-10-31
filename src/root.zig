@@ -380,6 +380,18 @@ pub const drawing = struct {
         }
     }
 
+    pub fn drawCircle(center_x: f32, center_y: f32, radius: f32, config: Renderer2D.CircleConfig) void {
+        renderer2D.drawCircle(center_x, center_y, radius, config);
+    }
+
+    pub fn drawRectOutline(x: f32, y: f32, w: f32, h: f32, config: Renderer2D.RectOutlineConfig) void {
+        renderer2D.drawRectOutline(x, y, w, h, config);
+    }
+
+    pub fn drawCircleOutline(center_x: f32, center_y: f32, radius: f32, config: Renderer2D.CircleOutlineConfig) void {
+        renderer2D.drawCircleOutline(center_x, center_y, radius, config);
+    }
+
     pub fn drawText(window_scale: [2]f32, font_collection: FontFamily, text: []const u8, x: f32, y: f32, size: f32, style: FontStyle, text_color: Color) void {
         renderer2D.drawText(window_scale, font_collection, text, x, y, size, style, text_color);
     }

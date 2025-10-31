@@ -467,6 +467,107 @@ pub const Renderer2D = struct {
         self.rect_count += 1;
     }
 
+    pub const CircleConfig = struct {
+        color: [4]u8 = .{ 255, 255, 255, 255 },
+        border_width: f32 = 0,
+        border_color: [4]u8 = .{ 0, 0, 0, 255 },
+    };
+
+    pub fn drawCircle(self: *Renderer2D, center_x: f32, center_y: f32, radius: f32, config: CircleConfig) void {
+        if (self.rect_count >= MAX_RECTANGLES) self.flush();
+
+        // A circle is just a square with corner_radius = radius
+        const diameter = radius * 2;
+        const tl_x = center_x - radius;
+        const tl_y = center_y - radius;
+
+        const border_widths: [4]f32 = if (config.border_width > 0)
+            .{ config.border_width, config.border_width, config.border_width, config.border_width }
+        else
+            .{ 0, 0, 0, 0 };
+
+        self.instance_data[self.rect_count] = .fromRect(
+            tl_x,
+            tl_y,
+            diameter,
+            diameter,
+            radius, // corner_radius = radius makes it a perfect circle
+            config.color,
+            border_widths,
+            config.border_color,
+            0, // no rotation
+        );
+
+        self.rect_count += 1;
+    }
+
+    pub const RectOutlineConfig = struct {
+        corner_radius: [4]f32 = .{0} ** 4,
+        stroke_width: f32 = 1.0,
+        color: [4]u8 = .{ 255, 255, 255, 255 },
+    };
+
+    pub fn drawRectOutline(self: *Renderer2D, tl_x: f32, tl_y: f32, w: f32, h: f32, config: RectOutlineConfig) void {
+        if (self.rect_count >= MAX_RECTANGLES) self.flush();
+
+        // Use border to create outline effect - fill is transparent, border is the stroke
+        const border_widths: [4]f32 = .{
+            config.stroke_width,
+            config.stroke_width,
+            config.stroke_width,
+            config.stroke_width,
+        };
+
+        self.instance_data[self.rect_count] = .fromRect(
+            tl_x,
+            tl_y,
+            w,
+            h,
+            config.corner_radius[0], // Using first corner radius (uniform for now)
+            .{ 0, 0, 0, 0 }, // transparent fill
+            border_widths,
+            config.color, // stroke color
+            0, // no rotation
+        );
+
+        self.rect_count += 1;
+    }
+
+    pub const CircleOutlineConfig = struct {
+        stroke_width: f32 = 1.0,
+        color: [4]u8 = .{ 255, 255, 255, 255 },
+    };
+
+    pub fn drawCircleOutline(self: *Renderer2D, center_x: f32, center_y: f32, radius: f32, config: CircleOutlineConfig) void {
+        if (self.rect_count >= MAX_RECTANGLES) self.flush();
+
+        // A circle outline is a square with corner_radius = radius, transparent fill, and border
+        const diameter = radius * 2;
+        const tl_x = center_x - radius;
+        const tl_y = center_y - radius;
+
+        const border_widths: [4]f32 = .{
+            config.stroke_width,
+            config.stroke_width,
+            config.stroke_width,
+            config.stroke_width,
+        };
+
+        self.instance_data[self.rect_count] = .fromRect(
+            tl_x,
+            tl_y,
+            diameter,
+            diameter,
+            radius, // corner_radius = radius makes it a perfect circle
+            .{ 0, 0, 0, 0 }, // transparent fill
+            border_widths,
+            config.color, // stroke color
+            0, // no rotation
+        );
+
+        self.rect_count += 1;
+    }
+
     pub fn drawText(self: *Renderer2D, window_scale: [2]f32, font_family: FontFamily, text: []const u8, x: f32, y: f32, size: f32, style: FontStyle, text_color: [4]u8) !void {
         // const now = std.time.milliTimestamp();
         // defer std.debug.print("drawText took {d}ms\n", .{std.time.milliTimestamp() - now});
