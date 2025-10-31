@@ -7,8 +7,8 @@ layout(location = 3) in vec4 inst_color; // Instance color
 layout(location = 4) in float inst_corner_radius; // Instance corner radius
 layout(location = 5) in vec4 inst_border_width; // Border width (l, r, t, b)
 layout(location = 6) in vec4 inst_border_color; // Border color
-layout(location = 7) in int use_texture; // 0 = solid, 1 = text, 2 = image
-layout(location = 8) in vec4 uv_data; // UV data for atlas (x, y, width, height)
+layout(location = 7) in int use_texture; // 0 = solid, 1 = text, 2 = image, 3 = arc
+layout(location = 8) in vec4 uv_data; // UV data for atlas (x, y, width, height) OR arc angles (start_angle, end_angle, unused, unused)
 layout(location = 9) in float rotation_rad; // Rotation angle in radians
 
 flat out vec2 rect_center;
@@ -21,6 +21,7 @@ flat out int v_use_texture;
 flat out float cos_rot;
 flat out float sin_rot;
 out vec2 v_uv;
+flat out vec2 arc_angles; // start_angle, end_angle
 
 uniform vec4 window_params; // xy = window size, zw = window scale
 
@@ -76,4 +77,7 @@ void main() {
     // UV mapping: map base_pos [-0.5, 0.5] to [0, 1] for text/image, adjusted for padding
     vec2 quad_uv = (base_pos + 0.5) * (inst_size / padded_size);
     v_uv = quad_uv * uv_data.zw + uv_data.xy;
+
+    // Arc angles (reusing uv_data for arc mode)
+    arc_angles = uv_data.xy;
 }

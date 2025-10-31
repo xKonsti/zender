@@ -9,6 +9,7 @@ flat in int v_use_texture;
 flat in float cos_rot; // Add this to your vertex shader outputs
 flat in float sin_rot; // Add this to your vertex shader outputs
 in vec2 v_uv;
+flat in vec2 arc_angles; // start_angle, end_angle
 out vec4 out_color;
 
 uniform vec4 window_params; // window_size.xy, window_scale.xy
@@ -121,6 +122,73 @@ void solid() {
         );
 }
 
+void arc() {
+    vec2 sample_pos = gl_FragCoord.xy;
+    vec2 half_size = rect_size * 0.5;
+    float radius = min(half_size.x, half_size.y);
+
+    float stroke_width = border_width[0]; // Use first border component for stroke width
+
+    // Compute angle from center
+    // gl_FragCoord.y increases upward (OpenGL convention), but rect_center.y has been flipped
+    // so we need to flip Y back to get correct angles
+    vec2 to_pixel = vec2(sample_pos.x - rect_center.x, rect_center.y - sample_pos.y);
+    // Standard convention: 0° = right, 90° = down, 180° = left, 270° = up
+    float angle = atan(to_pixel.y, to_pixel.x);
+
+    const float PI = 3.14159265359;
+    const float TWO_PI = 2.0 * PI;
+
+    // Normalize all angles to [0, 2*PI]
+    float start_angle = arc_angles.x;
+    float end_angle = arc_angles.y;
+
+    // Normalize start and end angles to [0, 2*PI]
+    start_angle = mod(start_angle, TWO_PI);
+    if (start_angle < 0.0) start_angle += TWO_PI;
+
+    end_angle = mod(end_angle, TWO_PI);
+    if (end_angle < 0.0) end_angle += TWO_PI;
+
+    // Normalize current angle to [0, 2*PI]
+    angle = mod(angle, TWO_PI);
+    if (angle < 0.0) angle += TWO_PI;
+
+    // Check if angle is within arc range
+    float angle_mask = 0.0;
+    if (end_angle >= start_angle) {
+        // Normal case: start < end
+        angle_mask = (angle >= start_angle && angle <= end_angle) ? 1.0 : 0.0;
+    } else {
+        // Wrap case: arc crosses 0 radians
+        angle_mask = (angle >= start_angle || angle <= end_angle) ? 1.0 : 0.0;
+    }
+
+    // Distance from center
+    float dist_from_center = length(to_pixel);
+
+    // Outer and inner radius
+    float outer_radius = radius;
+    float inner_radius = radius - stroke_width;
+
+    // SDF for the annulus (ring)
+    float dist_to_outer = dist_from_center - outer_radius;
+    float dist_to_inner = inner_radius - dist_from_center;
+
+    // Anti-aliasing
+    float softness = fwidth(dist_from_center);
+    float alpha_outer = clamp(-dist_to_outer / softness + 0.5, 0.0, 1.0);
+    float alpha_inner = clamp(-dist_to_inner / softness + 0.5, 0.0, 1.0);
+
+    // Ring coverage
+    float alpha_ring = alpha_outer * alpha_inner;
+
+    // Apply angle mask
+    float alpha = alpha_ring * angle_mask * rect_color.a;
+
+    out_color = vec4(rect_color.rgb, alpha);
+}
+
 void main() {
     switch (v_use_texture) {
         case 0: // handle solids (e.g. lines, rectangles)
@@ -136,6 +204,11 @@ void main() {
         case 2: // Handle image rendering (full RGBA)
         {
             image();
+            return;
+        }
+        case 3: // Handle arc rendering
+        {
+            arc();
             return;
         }
     }

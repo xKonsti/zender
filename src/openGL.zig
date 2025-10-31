@@ -166,8 +166,8 @@ const InstanceData = struct {
     border_width: [4]f32, // unscaled l,r,t,b
     border_color: [4]u8, // RGBA 0-255
     rotation: f32, // in radians
-    use_texture: enum(c_int) { solid = 0, text = 1, image = 2 }, // 0 = solid, 1 = text (grayscale), 2 = image (RGBA)
-    uv_data: [4]f32, // for text/images, UV data (x, y, width, height)
+    use_texture: enum(c_int) { solid = 0, text = 1, image = 2, arc = 3 }, // 0 = solid, 1 = text (grayscale), 2 = image (RGBA), 3 = arc
+    uv_data: [4]f32, // for text/images, UV data (x, y, width, height) OR for arc: (start_angle, end_angle, unused, unused)
 
     fn fromRect(
         x: f32,
@@ -564,6 +564,40 @@ pub const Renderer2D = struct {
             config.color, // stroke color
             0, // no rotation
         );
+
+        self.rect_count += 1;
+    }
+
+    pub const ArcConfig = struct {
+        start_angle_deg: f32 = 0.0, // Start angle in degrees (0 = right, 90 = down, 180 = left, 270 = up)
+        end_angle_deg: f32 = 90.0, // End angle in degrees
+        thickness: f32 = 10.0, // Thickness of the arc stroke
+        color: [4]u8 = .{ 255, 255, 255, 255 },
+    };
+
+    pub fn drawArc(self: *Renderer2D, center_x: f32, center_y: f32, radius: f32, config: ArcConfig) void {
+        if (self.rect_count >= MAX_RECTANGLES) self.flush();
+
+        // Convert degrees to radians for shader
+        const start_angle_rad = std.math.degreesToRadians(config.start_angle_deg);
+        const end_angle_rad = std.math.degreesToRadians(config.end_angle_deg);
+
+        // Bounding box is a square containing the circle
+        const diameter = radius * 2;
+        const tl_x = center_x - radius;
+        const tl_y = center_y - radius;
+
+        self.instance_data[self.rect_count] = .{
+            .pos_tl = .{ tl_x, tl_y },
+            .size = .{ diameter, diameter },
+            .color = config.color,
+            .corner_radius = radius, // Store radius in corner_radius field
+            .border_width = .{ config.thickness, config.thickness, config.thickness, config.thickness },
+            .border_color = .{ 0, 0, 0, 0 }, // unused for arcs
+            .use_texture = .arc,
+            .uv_data = .{ start_angle_rad, end_angle_rad, 0, 0 }, // Pack angles in uv_data
+            .rotation = 0,
+        };
 
         self.rect_count += 1;
     }
