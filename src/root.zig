@@ -396,6 +396,76 @@ pub const drawing = struct {
         renderer2D.drawArc(center_x, center_y, radius, config);
     }
 
+    /// Catmull-Rom spline interpolation
+    /// Returns a point on the curve at parameter t (0 to 1) between p1 and p2
+    /// p0 and p3 are the surrounding control points that influence the curve
+    fn catmullRomPoint(p0: [2]f32, p1: [2]f32, p2: [2]f32, p3: [2]f32, t: f32) [2]f32 {
+        const t2 = t * t;
+        const t3 = t2 * t;
+
+        const x = 0.5 * ((2.0 * p1[0]) +
+            (-p0[0] + p2[0]) * t +
+            (2.0 * p0[0] - 5.0 * p1[0] + 4.0 * p2[0] - p3[0]) * t2 +
+            (-p0[0] + 3.0 * p1[0] - 3.0 * p2[0] + p3[0]) * t3);
+
+        const y = 0.5 * ((2.0 * p1[1]) +
+            (-p0[1] + p2[1]) * t +
+            (2.0 * p0[1] - 5.0 * p1[1] + 4.0 * p2[1] - p3[1]) * t2 +
+            (-p0[1] + 3.0 * p1[1] - 3.0 * p2[1] + p3[1]) * t3);
+
+        return .{ x, y };
+    }
+
+    pub const CatmullRomConfig = struct {
+        width: f32 = 2.0,
+        color: [4]u8 = .{ 255, 255, 255, 255 },
+        cap: Renderer2D.LineCap = .round,
+        segments_per_curve: u32 = 20, // Number of line segments per curve section (higher = smoother)
+    };
+
+    /// Draw a smooth Catmull-Rom spline through the given control points
+    /// The curve will pass through all control points (except possibly the first and last)
+    /// Requires at least 2 control points
+    pub fn drawCatmullRomSpline(allocator: std.mem.Allocator, control_points: []const [2]f32, config: CatmullRomConfig) !void {
+        if (control_points.len < 2) return;
+
+        // Calculate total number of points we'll generate
+        const num_segments = if (control_points.len == 2) 1 else control_points.len - 1;
+        const total_points = num_segments * config.segments_per_curve + 1;
+
+        var points = try allocator.alloc([2]f32, total_points);
+        defer allocator.free(points);
+
+        var point_index: usize = 0;
+
+        // For each curve segment
+        var i: usize = 0;
+        while (i < control_points.len - 1) : (i += 1) {
+            // Get the 4 control points for this segment
+            // For endpoints, we duplicate the end points to maintain C1 continuity
+            const p0 = if (i == 0) control_points[0] else control_points[i - 1];
+            const p1 = control_points[i];
+            const p2 = control_points[i + 1];
+            const p3 = if (i + 2 >= control_points.len) control_points[control_points.len - 1] else control_points[i + 2];
+
+            // Generate points along this curve segment
+            var j: u32 = 0;
+            const segments_to_generate = if (i == control_points.len - 2) config.segments_per_curve + 1 else config.segments_per_curve;
+            while (j < segments_to_generate) : (j += 1) {
+                const t = @as(f32, @floatFromInt(j)) / @as(f32, @floatFromInt(config.segments_per_curve));
+                points[point_index] = catmullRomPoint(p0, p1, p2, p3, t);
+                point_index += 1;
+            }
+        }
+
+        // Draw the curve using lines
+        drawLines(points, .{
+            .width = config.width,
+            .color = config.color,
+            .cap = config.cap,
+        });
+    }
+
     pub fn drawText(window_scale: [2]f32, font_collection: FontFamily, text: []const u8, x: f32, y: f32, size: f32, style: FontStyle, text_color: Color) void {
         renderer2D.drawText(window_scale, font_collection, text, x, y, size, style, text_color);
     }

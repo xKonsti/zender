@@ -29,20 +29,48 @@ pub fn main() !void {
         zen.drawing.start();
         zen.drawing.drawLayout(interface_cmds);
 
-        // Draw a 90-degree arc (quarter circle)
-        zen.drawing.drawArc(400, 300, 100, .{
-            .start_angle_deg = -220,
-            .end_angle_deg = 90,
-            .thickness = 15,
-            .color = .{ 255, 100, 50, 255 },
+        const mouse_pos = zen.io.getMousePosition();
+
+        // Simple smooth curve through 4 points
+        try zen.drawing.drawCatmullRomSpline(allocator, &.{
+            .{ 100, 100 },
+            .{ 200, 50 },
+            .{ 300, 150 },
+            .{ 400, 100 },
+            .{ @floatCast(mouse_pos[0]), @floatCast(mouse_pos[1]) },
+        }, .{
+            .width = 4.0,
+            .color = .{ 0, 0, 0, 255 },
         });
 
-        zen.drawing.drawArc(600, 300, 80, .{
-            .start_angle_deg = 270,
-            .end_angle_deg = 90, // Go 270 degrees clockwise
-            .thickness = 10,
-            .color = .{ 50, 200, 50, 255 },
+        // Smoother curve with more segments
+        try zen.drawing.drawCatmullRomSpline(allocator, &.{
+            .{ 100, 200 },
+            .{ 200, 150 },
+            .{ 300, 250 },
+            .{ 400, 200 },
+            .{ 500, 150 },
+        }, .{
+            .width = 2.0,
+            .color = .{ 100, 200, 255, 255 },
+            .segments_per_curve = 40, // Very smooth
+            .cap = .round,
         });
+
+        // Draw a 90-degree arc (quarter circle)
+        // zen.drawing.drawArc(400, 300, 100, .{
+        //     .start_angle_deg = -220,
+        //     .end_angle_deg = 90,
+        //     .thickness = 15,
+        //     .color = .{ 255, 100, 50, 255 },
+        // });
+        //
+        // zen.drawing.drawArc(600, 300, 80, .{
+        //     .start_angle_deg = 270,
+        //     .end_angle_deg = 90, // Go 270 degrees clockwise
+        //     .thickness = 10,
+        //     .color = .{ 50, 200, 50, 255 },
+        // });
         // zen.drawing.drawRectOutline(100, 400, 100, 100, .{
         //     .color = .{ 240, 0, 0, 255 },
         //     .stroke_width = 16.0,
