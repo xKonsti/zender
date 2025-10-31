@@ -299,6 +299,8 @@ pub const Font = struct {
         if (text.len == 0) return &.{};
         if (std.unicode.utf8ValidateSlice(text) == false) return error.InvalidUtf8;
 
+        const allocator = self.alloc;
+
         const buffer = harfb.hb_buffer_create() orelse return error.HarfBuzzBufferCreateFailed;
         defer harfb.hb_buffer_destroy(buffer);
 
@@ -313,7 +315,7 @@ pub const Font = struct {
         const glyph_infos = harfb.hb_buffer_get_glyph_infos(buffer, null) orelse return error.HarfBuzzBufferGetGlyphInfosFailed;
         const glyph_positions = harfb.hb_buffer_get_glyph_positions(buffer, null) orelse return error.HarfBuzzBufferGetGlyphPositionsFailed;
 
-        const shaped_glyphs = try self.alloc.alloc(ShapedGlyph, @as(usize, @intCast(glyph_count)));
+        const shaped_glyphs = try allocator.alloc(ShapedGlyph, @as(usize, @intCast(glyph_count)));
 
         for (0..glyph_count) |i| {
             const info = glyph_infos[i];

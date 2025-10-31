@@ -33,7 +33,7 @@ const ShapeCacheKey = struct {
 
 const ShapeCache = struct {
     allocator: std.mem.Allocator,
-    map: std.AutoHashMapUnmanaged(ShapeCacheKey, CachedShape) = .{},
+    map: std.AutoHashMapUnmanaged(ShapeCacheKey, CachedShape) = .empty,
     frame_number: u128 = 0,
 
     const CachedShape = struct {
@@ -703,7 +703,7 @@ pub const ImageTexture = struct {
 
     pub fn loadFromPath(allocator: Allocator, path: []const u8) !ImageTexture {
         const path_z = try allocator.dupeZ(u8, path);
-        defer allocator.free(path_z);
+        errdefer allocator.free(path_z);
 
         var width: c_int = undefined;
         var height: c_int = undefined;

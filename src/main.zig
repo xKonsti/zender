@@ -12,11 +12,9 @@ pub fn main() !void {
         _ = gpa.deinit();
     }
 
-    const now = std.time.milliTimestamp();
-
     const allocator = gpa.allocator();
 
-    try zen.core.init(allocator, .{ 1200, 800 }, "Zender Test", .{});
+    try zen.core.init(allocator, .{ 1200, 800 }, "Zender Test", .{ .print_perf = true });
     defer zen.core.deinit();
 
     calculator_icon = zen.Image.loadFromMemory(@embedFile("resources/calculator.png")) catch unreachable;
@@ -30,34 +28,34 @@ pub fn main() !void {
 
         zen.drawing.start();
         zen.drawing.drawLayout(interface_cmds);
-        zen.drawing.drawRect(100, 400, 100, 100, .{
-            // .corner_radius = .{16} ** 4,
-            .color = .{ 200, 200, 200, 255 },
-            .rotation_deg = @floatFromInt(@mod(@divFloor(std.time.milliTimestamp() - now, 10), 360)),
-        });
-        // Simple line
-        const mouse_pos = zen.io.getMousePosition();
-        zen.drawing.drawLine(
-            .{ 50, 50 },
-            .{ @floatCast(mouse_pos[0]), @floatCast(mouse_pos[1]) },
-            .{
-                .width = 4.0,
-                .cap = .round,
-                .color = .{ 0, 0, 0, 255 },
-            },
-        );
-
-        zen.drawing.drawLines(&.{
-            .{ 100, 100 },
-            .{ 200, 200 },
-            .{ 800, 300 },
-            .{ 300, 600 },
-            .{ 100, 100 },
-        }, .{
-            .width = 2.0,
-            .cap = .round,
-            .color = .{ 0, 0, 0, 255 },
-        });
+        // zen.drawing.drawRect(100, 400, 100, 100, .{
+        //     // .corner_radius = .{16} ** 4,
+        //     .color = .{ 200, 200, 200, 255 },
+        //     .rotation_deg = @floatFromInt(@mod(@divFloor(std.time.milliTimestamp() - now, 10), 360)),
+        // });
+        // // Simple line
+        // const mouse_pos = zen.io.getMousePosition();
+        // zen.drawing.drawLine(
+        //     .{ 50, 50 },
+        //     .{ @floatCast(mouse_pos[0]), @floatCast(mouse_pos[1]) },
+        //     .{
+        //         .width = 4.0,
+        //         .cap = .round,
+        //         .color = .{ 0, 0, 0, 255 },
+        //     },
+        // );
+        //
+        // zen.drawing.drawLines(&.{
+        //     .{ 100, 100 },
+        //     .{ 200, 200 },
+        //     .{ 800, 300 },
+        //     .{ 300, 600 },
+        //     .{ 100, 100 },
+        // }, .{
+        //     .width = 2.0,
+        //     .cap = .round,
+        //     .color = .{ 0, 0, 0, 255 },
+        // });
 
         zen.drawing.end();
 
@@ -67,8 +65,117 @@ pub fn main() !void {
 
 var calculator_icon: zen.Image = undefined;
 // zen.drawing.Image.loadFromMemory(@embedFile("resources/calculator.png"));
-
 fn interface() void {
+    if (zlay.open(.{
+        .id = .from("root"),
+        .sizing = .{ .full, .full },
+        .padding = .all(8),
+        .bg_color = .light_300,
+        .layout = .flex(.{
+            .gap = 8,
+        }),
+    })) {
+        defer zlay.close();
+
+        if (zlay.open(.{
+            .layout = .flex(.{
+                .gap = 8,
+                .direction = .y,
+                .alignment = .top_center,
+            }),
+            .sizing = .{ .fixed(120), .full },
+            .bg_color = .light_200,
+            .border = .all(1, .withAlpha(.black, 0.2)),
+            .corner_radius = .all(8),
+            .padding = .all(8),
+        })) {
+            defer zlay.close();
+
+            const hvrd = zlay.hovered();
+
+            if (zlay.open(.{
+                .sizing = .{ .full, .fit },
+                .layout = .flex(.{
+                    .gap = 4,
+                    .direction = .y,
+                    .alignment = .center,
+                }),
+            })) {
+                defer zlay.close();
+
+                if (zlay.open(.{
+                    .sizing = .{ .fixed(16), .fixed(16) },
+                    .corner_radius = .all(400),
+                    .bg_color = .red,
+                })) {
+                    defer zlay.close();
+                }
+                zlay.text("Demo", .{
+                    .text_color = .dark_300,
+                    .font_size = 24,
+                });
+            }
+            zlay.text("das ist ein test das ist ein test das ist ein test", .{});
+
+            if (hvrd) {
+                zlay.text("hidden text", .{
+                    .font_size = 18,
+                    .text_color = .dark_300,
+                });
+            }
+        }
+
+        if (zlay.open(.{
+            .layout = .flex(.{
+                .gap = 8,
+                .direction = .y,
+                .alignment = .top_center,
+            }),
+            .sizing = .{ .grow, .full },
+            .bg_color = .light_200,
+            .border = .all(1, .withAlpha(.black, 0.2)),
+            .corner_radius = .all(8),
+            .padding = .all(8),
+        })) {
+            defer zlay.close();
+        }
+
+        if (zlay.open(.{
+            .layout = .flex(.{
+                .gap = 8,
+                .direction = .y,
+                .alignment = .top_center,
+            }),
+            .sizing = .{ .fixed(120), .full },
+            .bg_color = .light_200,
+            .border = .all(1, .withAlpha(.black, 0.2)),
+            .corner_radius = .all(8),
+            .padding = .all(8),
+        })) {
+            defer zlay.close();
+
+            inline for (0..24) |i| {
+                if (zlay.open(.{
+                    .id = .from(i),
+                    .sizing = .{ .full, .fit },
+                    .bg_color = .orange,
+                    .corner_radius = .all(8),
+                    .layout = .flex(.{
+                        .alignment = .center,
+                    }),
+                })) {
+                    defer zlay.close();
+
+                    zlay.text(std.fmt.comptimePrint("Item {d}", .{i}), .{
+                        .text_color = .dark_300,
+                    });
+                }
+            }
+        }
+    }
+}
+
+fn interface2() void {
     if (zlay.open(.{
         .id = .from("root"),
         .sizing = .{ .full, .full },

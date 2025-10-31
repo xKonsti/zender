@@ -127,8 +127,8 @@ pub const core = struct {
         deinitStandardCursors();
         glfw_mod.deinit();
         window.deinit();
-        opengl_mod.c.makeProcTableCurrent(null);
         program.deinit();
+        opengl_mod.c.makeProcTableCurrent(null);
     }
 
     /// Check if the window should close
@@ -236,9 +236,8 @@ pub const drawing = struct {
         for (cmds) |cmd| {
             switch (cmd) {
                 .clipStart => |clip| {
-                    if (renderer2D.rect_count > 0) {
+                    if (renderer2D.rect_count > 0)
                         renderer2D.flush();
-                    }
 
                     const bottom_left_y = @as(f32, @floatFromInt(window.windowSize()[1])) - clip.rect[3] - clip.rect[1];
                     const rect: [4]f32 = .{
