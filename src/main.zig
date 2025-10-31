@@ -14,7 +14,7 @@ pub fn main() !void {
 
     const allocator = gpa.allocator();
 
-    try zen.core.init(allocator, .{ 1200, 800 }, "Zender Test", .{ .print_perf = true });
+    try zen.core.init(allocator, .{ 1200, 800 }, "Zender Test", .{ .print_perf = false });
     defer zen.core.deinit();
 
     calculator_icon = zen.Image.loadFromMemory(@embedFile("resources/calculator.png")) catch unreachable;
@@ -28,6 +28,40 @@ pub fn main() !void {
 
         zen.drawing.start();
         zen.drawing.drawLayout(interface_cmds);
+
+        // Concrete wall - 45° single hatching
+        zen.drawing.drawHatching(120, 100, 200, 400, .{
+            .angle_deg = 45,
+            .spacing = 8,
+            .width = 1,
+            .color = .{ 0, 0, 0, 255 },
+        });
+
+        // Earth/soil - cross-hatching
+        zen.drawing.drawHatching(350, 100, 200, 400, .{
+            .angle_deg = 45,
+            .spacing = 10,
+            .width = 1,
+            .pattern = .cross,
+            .color = .{ 100, 100, 100, 255 },
+        });
+
+        // Brick - vertical hatching with tighter spacing
+        zen.drawing.drawHatching(600, 100, 200, 400, .{
+            .angle_deg = 90,
+            .spacing = 5,
+            .width = 0.5,
+            .color = .{ 150, 0, 0, 255 },
+        });
+
+        // Wood grain - horizontal with wide spacing
+        zen.drawing.drawHatching(850, 100, 200, 400, .{
+            .angle_deg = 0,
+            .spacing = 28,
+            .width = 4.5,
+            .pattern = .cross,
+            .color = .{ 139, 69, 19, 255 },
+        });
 
         const mouse_pos = zen.io.getMousePosition();
 
@@ -53,7 +87,6 @@ pub fn main() !void {
         }, .{
             .width = 2.0,
             .color = .{ 100, 200, 255, 255 },
-            .segments_per_curve = 40, // Very smooth
             .cap = .round,
         });
 
@@ -163,12 +196,22 @@ fn interface() void {
                     defer zlay.close();
                 }
                 zlay.text("Demo", .{
+                    .font_style = .bold,
                     .text_color = .dark_300,
                     .font_size = 24,
                 });
             }
             zlay.text("das ist ein test das ist ein test das ist ein test", .{});
+            // if (zlay.open(.{
+            //     .bg_color = .red,
+            //     .sizing = .{ .full, .fit },
+            // })) {
+            //     defer zlay.close();
 
+            zlay.text("lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor", .{
+                .sizing = .{ .full, .fit },
+            });
+            // }
             if (hvrd) {
                 zlay.text("hidden text", .{
                     .font_size = 18,

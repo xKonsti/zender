@@ -81,6 +81,9 @@ pub const core = struct {
     /// Initialize the zender library
     /// Must be called before any other zender functions
     pub fn init(alloc: std.mem.Allocator, screen_dimensions: [2]u32, title: [:0]const u8, cfg: Config) !void {
+        // Store allocator for dropped files
+        dropped_files_allocator = alloc;
+
         try glfw_mod.init();
         errdefer glfw_mod.deinit();
 
@@ -94,6 +97,7 @@ pub const core = struct {
         _ = glfw_mod.c.glfwSetKeyCallback(window.handle, keyCallback);
         _ = glfw_mod.c.glfwSetCharCallback(window.handle, charCallback);
         _ = glfw_mod.c.glfwSetMouseButtonCallback(window.handle, mouseButtonCallback);
+        _ = glfw_mod.c.glfwSetDropCallback(window.handle, dropCallback);
 
         glfw_mod.makeContextCurrent(window.handle);
         glfw_mod.swapInterval(1); // enable vsync
@@ -147,6 +151,12 @@ pub const core = struct {
         char_input_queue_count = 0;
         key_pressed_queue_count = 0;
         mouse_button_pressed_queue_count = 0;
+
+        // Free and clear dropped files from previous frame
+        for (dropped_files_queue[0..dropped_files_queue_count]) |path| {
+            dropped_files_allocator.free(path);
+        }
+        dropped_files_queue_count = 0;
 
         // Then poll events to fill the queues for this frame
         glfw_mod.pollEvents();
@@ -466,6 +476,150 @@ pub const drawing = struct {
         });
     }
 
+    pub const HatchingPattern = enum {
+        single, // Single direction hatching
+        cross, // Cross-hatching (two perpendicular directions)
+    };
+
+    pub const HatchingConfig = struct {
+        angle_deg: f32 = 45.0, // Angle of hatching lines in degrees
+        spacing: f32 = 10.0, // Distance between parallel lines
+        width: f32 = 1.0, // Line width
+        color: [4]u8 = .{ 0, 0, 0, 255 },
+        pattern: HatchingPattern = .single,
+    };
+
+    /// Draw hatching pattern (Schraffur) inside a rectangle
+    /// Commonly used in architectural drawings to indicate materials
+    pub fn drawHatching(x: f32, y: f32, w: f32, h: f32, config: HatchingConfig) void {
+        const angle_rad = std.math.degreesToRadians(config.angle_deg);
+        const cos_a = @cos(angle_rad);
+        const sin_a = @sin(angle_rad);
+
+        // Calculate the diagonal length of the rectangle to ensure we cover everything
+        const diagonal = @sqrt(w * w + h * h);
+
+        // Number of lines needed
+        const num_lines = @as(i32, @intFromFloat(@ceil(diagonal / config.spacing))) + 1;
+
+        // Draw first set of lines
+        var i: i32 = -num_lines;
+        while (i <= num_lines) : (i += 1) {
+            const offset = @as(f32, @floatFromInt(i)) * config.spacing;
+
+            // Calculate line start and end in rotated space
+            const perp_x = -sin_a;
+            const perp_y = cos_a;
+
+            // Line center point
+            const center_x = x + w / 2.0 + perp_x * offset;
+            const center_y = y + h / 2.0 + perp_y * offset;
+
+            // Line direction (along the angle)
+            const line_x1 = center_x - cos_a * diagonal;
+            const line_y1 = center_y - sin_a * diagonal;
+            const line_x2 = center_x + cos_a * diagonal;
+            const line_y2 = center_y + sin_a * diagonal;
+
+            // Clip line to rectangle bounds
+            if (clipLineToRect(
+                .{ line_x1, line_y1 },
+                .{ line_x2, line_y2 },
+                .{ x, y, w, h },
+            )) |clipped| {
+                drawLine(clipped.p1, clipped.p2, .{
+                    .width = config.width,
+                    .color = config.color,
+                    .cap = .butt,
+                });
+            }
+        }
+
+        // Draw cross-hatching if requested
+        if (config.pattern == .cross) {
+            const cross_angle_rad = angle_rad + std.math.pi / 2.0;
+            const cos_a2 = @cos(cross_angle_rad);
+            const sin_a2 = @sin(cross_angle_rad);
+
+            var j: i32 = -num_lines;
+            while (j <= num_lines) : (j += 1) {
+                const offset = @as(f32, @floatFromInt(j)) * config.spacing;
+
+                const perp_x = -sin_a2;
+                const perp_y = cos_a2;
+
+                const center_x = x + w / 2.0 + perp_x * offset;
+                const center_y = y + h / 2.0 + perp_y * offset;
+
+                const line_x1 = center_x - cos_a2 * diagonal;
+                const line_y1 = center_y - sin_a2 * diagonal;
+                const line_x2 = center_x + cos_a2 * diagonal;
+                const line_y2 = center_y + sin_a2 * diagonal;
+
+                if (clipLineToRect(
+                    .{ line_x1, line_y1 },
+                    .{ line_x2, line_y2 },
+                    .{ x, y, w, h },
+                )) |clipped| {
+                    drawLine(clipped.p1, clipped.p2, .{
+                        .width = config.width,
+                        .color = config.color,
+                        .cap = .butt,
+                    });
+                }
+            }
+        }
+    }
+
+    const ClippedLine = struct {
+        p1: [2]f32,
+        p2: [2]f32,
+    };
+
+    /// Clip a line segment to a rectangle using Liang-Barsky algorithm
+    fn clipLineToRect(p1: [2]f32, p2: [2]f32, rect: [4]f32) ?ClippedLine {
+        const x1 = p1[0];
+        const y1 = p1[1];
+        const x2 = p2[0];
+        const y2 = p2[1];
+
+        const x_min = rect[0];
+        const y_min = rect[1];
+        const x_max = rect[0] + rect[2];
+        const y_max = rect[1] + rect[3];
+
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+
+        var t0: f32 = 0.0;
+        var t1: f32 = 1.0;
+
+        // Check all four edges
+        const p = [4]f32{ -dx, dx, -dy, dy };
+        const q = [4]f32{ x1 - x_min, x_max - x1, y1 - y_min, y_max - y1 };
+
+        for (0..4) |i| {
+            if (p[i] == 0.0) {
+                // Line is parallel to this edge
+                if (q[i] < 0.0) return null; // Line is outside
+            } else {
+                const r = q[i] / p[i];
+                if (p[i] < 0.0) {
+                    if (r > t1) return null;
+                    if (r > t0) t0 = r;
+                } else {
+                    if (r < t0) return null;
+                    if (r < t1) t1 = r;
+                }
+            }
+        }
+
+        return .{
+            .p1 = .{ x1 + t0 * dx, y1 + t0 * dy },
+            .p2 = .{ x1 + t1 * dx, y1 + t1 * dy },
+        };
+    }
+
     pub fn drawText(window_scale: [2]f32, font_collection: FontFamily, text: []const u8, x: f32, y: f32, size: f32, style: FontStyle, text_color: Color) void {
         renderer2D.drawText(window_scale, font_collection, text, x, y, size, style, text_color);
     }
@@ -495,6 +649,12 @@ var key_pressed_queue_count: usize = 0;
 const MAX_MOUSE_QUEUE = 8;
 var mouse_button_pressed_queue: [MAX_MOUSE_QUEUE]c_int = [_]c_int{0} ** MAX_MOUSE_QUEUE;
 var mouse_button_pressed_queue_count: usize = 0;
+
+// Dropped files queue (store allocated file paths)
+const MAX_DROPPED_FILES_QUEUE = 16;
+var dropped_files_queue: [MAX_DROPPED_FILES_QUEUE][]const u8 = [_][]const u8{&.{}} ** MAX_DROPPED_FILES_QUEUE;
+var dropped_files_queue_count: usize = 0;
+var dropped_files_allocator: std.mem.Allocator = undefined;
 
 fn charCallback(win: ?*glfw_mod.c.GLFWwindow, codepoint: c_uint) callconv(.c) void {
     _ = win;
@@ -532,6 +692,30 @@ fn mouseButtonCallback(win: ?*glfw_mod.c.GLFWwindow, button: c_int, action: c_in
     if (action == glfw_mod.c.GLFW_PRESS and mouse_button_pressed_queue_count < MAX_MOUSE_QUEUE) {
         mouse_button_pressed_queue[mouse_button_pressed_queue_count] = button;
         mouse_button_pressed_queue_count += 1;
+    }
+}
+
+fn dropCallback(win: ?*glfw_mod.c.GLFWwindow, count: c_int, paths: [*c]const [*c]const u8) callconv(.c) void {
+    _ = win;
+
+    // Early return if queue would overflow
+    if (dropped_files_queue_count >= MAX_DROPPED_FILES_QUEUE) return;
+
+    // Add each dropped file path to the queue
+    var i: usize = 0;
+    while (i < @as(usize, @intCast(count)) and dropped_files_queue_count < MAX_DROPPED_FILES_QUEUE) : (i += 1) {
+        const c_path = paths[i];
+        const len = std.mem.len(c_path);
+
+        // Allocate and copy the path string
+        const path_copy = dropped_files_allocator.alloc(u8, len) catch {
+            std.log.err("Failed to allocate memory for dropped file path", .{});
+            return;
+        };
+        @memcpy(path_copy, c_path[0..len]);
+
+        dropped_files_queue[dropped_files_queue_count] = path_copy;
+        dropped_files_queue_count += 1;
     }
 }
 
@@ -825,6 +1009,32 @@ pub const io = struct {
     /// Reset the mouse cursor to the default arrow cursor
     pub fn setDefaultCursor() void {
         glfw_mod.c.glfwSetCursor(window.handle, null);
+    }
+
+    /// Get the next dropped file path from the queue, returns null if empty
+    /// The returned string is valid until the next frame (i.e., until the next beginFrame() call)
+    /// If you need to keep the path longer, you must copy it yourself
+    pub fn getDroppedFile() ?[]const u8 {
+        if (dropped_files_queue_count == 0) return null;
+
+        // Get first file path
+        const path = dropped_files_queue[0];
+
+        // Shift remaining paths left
+        var i: usize = 0;
+        while (i < dropped_files_queue_count - 1) : (i += 1) {
+            dropped_files_queue[i] = dropped_files_queue[i + 1];
+        }
+        dropped_files_queue_count -= 1;
+
+        return path;
+    }
+
+    /// Get all dropped files from this frame as a slice
+    /// The returned slice is valid until the next frame (i.e., until the next beginFrame() call)
+    /// If you need to keep the paths longer, you must copy them yourself
+    pub fn getDroppedFiles() []const []const u8 {
+        return dropped_files_queue[0..dropped_files_queue_count];
     }
 };
 
