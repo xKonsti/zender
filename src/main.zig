@@ -164,6 +164,51 @@ pub fn main() !void {
         //     .color = .{ 0, 0, 0, 255 },
         // });
 
+        // Camera example - draw some rectangles in world space
+        // Set up camera with zoom and pan
+        const time = @as(f32, @floatFromInt(std.time.milliTimestamp())) / 1000.0;
+        zen.camera.setOffset(600, 400); // Center of screen
+        zen.camera.setZoom(1.0 + @sin(time) * 0.3); // Animate zoom
+        zen.camera.setRotation(time * 0.5); // Rotate slowly
+        zen.camera.setTarget(0, 0); // Look at world origin
+
+        zen.camera.begin();
+
+        // Draw a grid in world space
+        var i: i32 = -5;
+        while (i <= 5) : (i += 1) {
+            const pos = @as(f32, @floatFromInt(i)) * 100.0;
+            zen.drawing.drawRect(pos - 5, -500, 10, 1000, .{
+                .color = .{ 200, 200, 200, 100 },
+            });
+            zen.drawing.drawRect(-500, pos - 5, 1000, 10, .{
+                .color = .{ 200, 200, 200, 100 },
+            });
+        }
+
+        // Draw colored squares in world space
+        zen.drawing.drawRect(-100, -100, 80, 80, .{
+            .color = .{ 255, 0, 0, 255 },
+            .corner_radius = .{10} ** 4,
+        });
+        zen.drawing.drawRect(20, -100, 80, 80, .{
+            .color = .{ 0, 255, 0, 255 },
+            .corner_radius = .{10} ** 4,
+        });
+        zen.drawing.drawRect(-100, 20, 80, 80, .{
+            .color = .{ 0, 0, 255, 255 },
+            .corner_radius = .{10} ** 4,
+        });
+        zen.drawing.drawRect(20, 20, 80, 80, .{
+            .color = .{ 255, 255, 0, 255 },
+            .corner_radius = .{10} ** 4,
+        });
+
+        // Note: Text rendering in world space would need the full drawText signature
+        // For now, we'll skip text in the camera example
+
+        zen.camera.end();
+
         zen.drawing.end();
 
         zen.core.endFrame();

@@ -24,6 +24,8 @@ out vec2 v_uv;
 flat out vec2 arc_angles; // start_angle, end_angle
 
 uniform vec4 window_params; // xy = window size, zw = window scale
+uniform mat3 u_camera_matrix; // Camera transformation matrix
+uniform int u_use_camera; // 1 = apply camera, 0 = no camera
 
 void main() {
     vec2 window_scale = window_params.zw;
@@ -49,25 +51,45 @@ void main() {
     vec2 rotated = rot * local_pos;
     vec2 final_pos_unscaled = rotated + rect_center_unscaled;
 
+    // Apply camera transform if enabled
+    vec2 camera_transformed = final_pos_unscaled;
+    vec2 camera_transformed_center = rect_center_unscaled;
+    if (u_use_camera == 1) {
+        vec3 pos_homogeneous = vec3(final_pos_unscaled, 1.0);
+        vec3 transformed = u_camera_matrix * pos_homogeneous;
+        camera_transformed = transformed.xy;
+
+        // Also transform the rect center for fragment shader
+        vec3 center_homogeneous = vec3(rect_center_unscaled, 1.0);
+        vec3 center_transformed = u_camera_matrix * center_homogeneous;
+        camera_transformed_center = center_transformed.xy;
+    }
+
     // Scale to buffer coordinates
-    vec2 final_pos_scaled = final_pos_unscaled * window_scale;
+    vec2 final_pos_scaled = camera_transformed * window_scale;
 
     vec2 ndc = (final_pos_scaled / buffer_size) * 2.0 - 1.0;
     ndc.y = -ndc.y; // Flip Y for top-left origin in API
     gl_Position = vec4(ndc, 0.0, 1.0);
 
     // Pass instance data to fragment shader (in buffer coordinates)
-    rect_center = rect_center_unscaled * window_scale;
+    rect_center = camera_transformed_center * window_scale;
     // Convert to GL framebuffer coordinate space where origin is top-left
     rect_center.y = buffer_size.y - rect_center.y;
 
-    // Pass the ORIGINAL (unpadded) rect size to fragment shader
-    rect_size = inst_size * window_scale; // Unrotated size for SDF computation
+    // Extract camera zoom factor (length of first column of rotation/scale part)
+    float camera_zoom = 1.0;
+    if (u_use_camera == 1) {
+        camera_zoom = length(u_camera_matrix[0].xy);
+    }
+
+    // Pass rect size scaled by camera zoom to fragment shader
+    rect_size = inst_size * window_scale * camera_zoom; // Scaled size for SDF computation
 
     rect_color = inst_color;
 
-    float scale_min = min(window_scale.x, window_scale.y);
-    // Corner radius needs to be clamped against the (unrotated) rect size
+    float scale_min = min(window_scale.x, window_scale.y) * camera_zoom;
+    // Corner radius needs to be clamped against the (zoomed) rect size
     corner_radius = min(inst_corner_radius * scale_min, min(rect_size.x, rect_size.y));
     border_width = inst_border_width * scale_min;
     border_color = inst_border_color;

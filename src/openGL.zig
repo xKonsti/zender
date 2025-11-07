@@ -99,6 +99,8 @@ pub const Program = struct {
 
     window_params_loc: c_int,
     tex_loc: c_int,
+    camera_matrix_loc: c_int,
+    use_camera_loc: c_int,
 
     pub fn init(comptime vertex_shader_src: []const u8, comptime fragment_shader_src: []const u8) !Program {
         const program_id = c.CreateProgram();
@@ -126,6 +128,8 @@ pub const Program = struct {
             .id = program_id,
             .window_params_loc = c.GetUniformLocation(program_id, "window_params"),
             .tex_loc = c.GetUniformLocation(program_id, "tex"),
+            .camera_matrix_loc = c.GetUniformLocation(program_id, "u_camera_matrix"),
+            .use_camera_loc = c.GetUniformLocation(program_id, "u_use_camera"),
         };
     }
 
@@ -226,6 +230,14 @@ pub const Renderer2D = struct {
     triangle_vbo: c_uint,
     triangle_vertices: [MAX_TRIANGLES * 3]TriangleVertex,
     triangle_count: usize,
+
+    // Camera state
+    camera_enabled: bool,
+    camera_matrix: [9]f32,
+
+    // Cached window parameters for flushing
+    window_size: [2]u32,
+    window_scale: [2]f32,
 
     pub fn init(allocator: std.mem.Allocator, program: Program, triangle_program: Program) !Renderer2D {
         var vao: c_uint = undefined;
@@ -353,6 +365,12 @@ pub const Renderer2D = struct {
             .triangle_vbo = triangle_vbo,
             .triangle_vertices = undefined,
             .triangle_count = 0,
+
+            .camera_enabled = false,
+            .camera_matrix = [_]f32{1.0} ** 9,
+
+            .window_size = .{ 1, 1 },
+            .window_scale = .{ 1.0, 1.0 },
         };
     }
 
@@ -384,6 +402,9 @@ pub const Renderer2D = struct {
     pub fn begin(self: *Renderer2D, window_size: [2]u32, window_scale: [2]f32) void {
         self.rect_count = 0;
         self.triangle_count = 0;
+        // Cache window parameters for flushing
+        self.window_size = window_size;
+        self.window_scale = window_scale;
         // reset per-frame caches
         self.shape_cache.beginFrame();
         c.BindVertexArray(self.vao);
@@ -392,12 +413,18 @@ pub const Renderer2D = struct {
         c.Uniform1i(self.program.tex_loc, 0);
         c.ActiveTexture(c.TEXTURE0);
 
+        // Upload camera state
+        c.Uniform1i(self.program.use_camera_loc, if (self.camera_enabled) 1 else 0);
+        if (self.camera_enabled) {
+            c.UniformMatrix3fv(self.program.camera_matrix_loc, 1, c.FALSE, @ptrCast(&self.camera_matrix));
+        }
+
         if (c.GetError() != c.NO_ERROR) {
             std.log.err("OpenGL error during Renderer2D.begin: {d}", .{c.GetError()});
         }
     }
 
-    pub fn flush(self: *Renderer2D) void {
+    pub fn flushRectangles(self: *Renderer2D) void {
         if (self.rect_count == 0) return;
         // std.log.debug("Flushing {d} rectangles", .{self.rect_count});
         c.BindVertexArray(self.vao);
@@ -410,6 +437,32 @@ pub const Renderer2D = struct {
         if (c.GetError() != c.NO_ERROR) {
             std.log.err("OpenGL error during Renderer2D.flush: {d}", .{c.GetError()});
         }
+    }
+
+    /// Enable camera mode with the given transformation matrix
+    pub fn enableCamera(self: *Renderer2D, matrix: [9]f32) void {
+        // Flush any pending draws before changing camera state
+        self.flushRectangles();
+        self.flushTriangles(self.window_size, self.window_scale);
+
+        self.camera_enabled = true;
+        self.camera_matrix = matrix;
+        // Update uniform immediately if program is active
+        c.UseProgram(self.program.id);
+        c.Uniform1i(self.program.use_camera_loc, 1);
+        c.UniformMatrix3fv(self.program.camera_matrix_loc, 1, c.FALSE, @ptrCast(&self.camera_matrix));
+    }
+
+    /// Disable camera mode (return to normal screen-space rendering)
+    pub fn disableCamera(self: *Renderer2D) void {
+        // Flush any pending draws before changing camera state
+        self.flushRectangles();
+        self.flushTriangles(self.window_size, self.window_scale);
+
+        self.camera_enabled = false;
+        // Update uniform immediately if program is active
+        c.UseProgram(self.program.id);
+        c.Uniform1i(self.program.use_camera_loc, 0);
     }
 
     fn getOrCreateAtlasTexture(self: *Renderer2D, font_atlas: FontAtlas, font_id: u64) c_uint {
@@ -432,7 +485,10 @@ pub const Renderer2D = struct {
     };
 
     pub fn drawRect(self: *Renderer2D, tl_x: f32, tl_y: f32, w: f32, h: f32, config: RectConfig) void {
-        if (self.rect_count >= MAX_RECTANGLES) self.flush();
+        // Flush any pending triangles to maintain rendering order
+        self.flushTriangles(self.window_size, self.window_scale);
+        if (self.rect_count >= MAX_RECTANGLES) self.flushRectangles();
+
         self.instance_data[self.rect_count] = .fromRect(
             tl_x,
             tl_y,
@@ -460,7 +516,8 @@ pub const Renderer2D = struct {
     };
 
     pub fn drawLine(self: *Renderer2D, p1: [2]f32, p2: [2]f32, config: LineConfig) void {
-        if (self.rect_count >= MAX_RECTANGLES) self.flush();
+        self.flushTriangles(self.window_size, self.window_scale);
+        if (self.rect_count >= MAX_RECTANGLES) self.flushRectangles();
 
         const x1 = p1[0];
         const y1 = p1[1];
@@ -518,7 +575,8 @@ pub const Renderer2D = struct {
     };
 
     pub fn drawCircle(self: *Renderer2D, center_x: f32, center_y: f32, radius: f32, config: CircleConfig) void {
-        if (self.rect_count >= MAX_RECTANGLES) self.flush();
+        self.flushTriangles(self.window_size, self.window_scale);
+        if (self.rect_count >= MAX_RECTANGLES) self.flushRectangles();
 
         // A circle is just a square with corner_radius = radius
         const diameter = radius * 2;
@@ -552,7 +610,8 @@ pub const Renderer2D = struct {
     };
 
     pub fn drawRectOutline(self: *Renderer2D, tl_x: f32, tl_y: f32, w: f32, h: f32, config: RectOutlineConfig) void {
-        if (self.rect_count >= MAX_RECTANGLES) self.flush();
+        self.flushTriangles(self.window_size, self.window_scale);
+        if (self.rect_count >= MAX_RECTANGLES) self.flushRectangles();
 
         // Use border to create outline effect - fill is transparent, border is the stroke
         const border_widths: [4]f32 = .{
@@ -583,7 +642,8 @@ pub const Renderer2D = struct {
     };
 
     pub fn drawCircleOutline(self: *Renderer2D, center_x: f32, center_y: f32, radius: f32, config: CircleOutlineConfig) void {
-        if (self.rect_count >= MAX_RECTANGLES) self.flush();
+        self.flushTriangles(self.window_size, self.window_scale);
+        if (self.rect_count >= MAX_RECTANGLES) self.flushRectangles();
 
         // A circle outline is a square with corner_radius = radius, transparent fill, and border
         const diameter = radius * 2;
@@ -620,7 +680,7 @@ pub const Renderer2D = struct {
     };
 
     pub fn drawArc(self: *Renderer2D, center_x: f32, center_y: f32, radius: f32, config: ArcConfig) void {
-        if (self.rect_count >= MAX_RECTANGLES) self.flush();
+        if (self.rect_count >= MAX_RECTANGLES) self.flushRectangles();
 
         // Convert degrees to radians for shader
         const start_angle_rad = std.math.degreesToRadians(config.start_angle_deg);
@@ -651,10 +711,9 @@ pub const Renderer2D = struct {
     };
 
     pub fn drawTriangle(self: *Renderer2D, p1: [2]f32, p2: [2]f32, p3: [2]f32, config: TriangleConfig) void {
-        if (self.triangle_count >= MAX_TRIANGLES) {
-            std.log.warn("Triangle buffer full, skipping triangle", .{});
-            return;
-        }
+        self.flushRectangles();
+        if (self.triangle_count >= MAX_TRIANGLES)
+            self.flushTriangles(self.window_size, self.window_scale);
 
         const base_idx = self.triangle_count * 3;
         self.triangle_vertices[base_idx] = .{
@@ -682,7 +741,7 @@ pub const Renderer2D = struct {
             return;
         };
         if (self.current_texture_id == null or self.current_font_id == null or self.current_font_id.? != font.id) {
-            self.flush();
+            self.flushRectangles();
             const tex = self.getOrCreateAtlasTexture(font.atlas, font.id);
             c.ActiveTexture(c.TEXTURE0);
             c.BindTexture(c.TEXTURE_2D, tex);
@@ -752,7 +811,7 @@ pub const Renderer2D = struct {
             const ypos = cursor_y - @as(f32, @floatFromInt(rect.top)) * scale - hb_yoff;
 
             // Queue instance
-            if (self.rect_count >= MAX_RECTANGLES) self.flush();
+            if (self.rect_count >= MAX_RECTANGLES) self.flushRectangles();
             self.instance_data[self.rect_count] = .{
                 .pos_tl = .{ xpos, ypos },
                 .size = .{ w, h },
@@ -789,7 +848,7 @@ pub const Renderer2D = struct {
     ) void {
         // Flush if we're switching textures
         if (self.current_image_id == null or self.current_image_id.? != image.id) {
-            self.flush();
+            self.flushRectangles();
             c.ActiveTexture(c.TEXTURE0);
             c.BindTexture(c.TEXTURE_2D, image.id);
             self.current_image_id = image.id;
@@ -797,7 +856,7 @@ pub const Renderer2D = struct {
             self.current_texture_id = null;
         }
 
-        if (self.rect_count >= MAX_RECTANGLES) self.flush();
+        if (self.rect_count >= MAX_RECTANGLES) self.flushRectangles();
 
         self.instance_data[self.rect_count] = .{
             .pos_tl = .{ x, y },
@@ -819,12 +878,18 @@ pub const Renderer2D = struct {
         c.BindVertexArray(self.triangle_vao);
         c.UseProgram(self.triangle_program.id);
         c.Uniform4f(
-            self.triangle_program.uniformLocation("window_params"),
+            self.triangle_program.window_params_loc,
             @floatFromInt(window_size[0]),
             @floatFromInt(window_size[1]),
             window_scale[0],
             window_scale[1],
         );
+
+        // Upload camera state for triangles
+        c.Uniform1i(self.triangle_program.use_camera_loc, if (self.camera_enabled) 1 else 0);
+        if (self.camera_enabled) {
+            c.UniformMatrix3fv(self.triangle_program.camera_matrix_loc, 1, c.FALSE, @ptrCast(&self.camera_matrix));
+        }
 
         c.BindBuffer(c.ARRAY_BUFFER, self.triangle_vbo);
         c.BufferSubData(
@@ -837,13 +902,24 @@ pub const Renderer2D = struct {
         c.DrawArrays(c.TRIANGLES, 0, @intCast(self.triangle_count * 3));
         self.triangle_count = 0;
 
+        // Restore main program state for subsequent rectangle/line draws
+        c.BindVertexArray(self.vao);
+        c.UseProgram(self.program.id);
+        c.Uniform4f(self.program.window_params_loc, @floatFromInt(window_size[0]), @floatFromInt(window_size[1]), window_scale[0], window_scale[1]);
+        c.Uniform1i(self.program.tex_loc, 0);
+        c.ActiveTexture(c.TEXTURE0);
+        c.Uniform1i(self.program.use_camera_loc, if (self.camera_enabled) 1 else 0);
+        if (self.camera_enabled) {
+            c.UniformMatrix3fv(self.program.camera_matrix_loc, 1, c.FALSE, @ptrCast(&self.camera_matrix));
+        }
+
         if (c.GetError() != c.NO_ERROR) {
             std.log.err("OpenGL error during flushTriangles: {d}", .{c.GetError()});
         }
     }
 
     pub fn end(self: *Renderer2D, window_size: [2]u32, window_scale: [2]f32) void {
-        self.flush();
+        self.flushRectangles();
         self.flushTriangles(window_size, window_scale);
     }
 

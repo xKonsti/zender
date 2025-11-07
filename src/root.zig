@@ -43,7 +43,6 @@
 //!     }
 //! }
 //! ```
-//!
 const std = @import("std");
 const assert = std.debug.assert;
 
@@ -56,6 +55,8 @@ const glfw_mod = @import("glfw.zig");
 const Renderer2D = opengl_mod.Renderer2D;
 const opengl_mod = @import("openGL.zig");
 pub const Image = opengl_mod.ImageTexture;
+const camera_mod = @import("camera.zig");
+pub const Camera2D = camera_mod.Camera2D;
 
 const rgfw = @cImport({
     @cDefine("RGFW_IMPLEMENTATION", {});
@@ -72,6 +73,9 @@ pub var window: glfw_mod.Window = undefined;
 var procs: opengl_mod.c.ProcTable = undefined;
 var program: opengl_mod.Program = undefined;
 var renderer2D: opengl_mod.Renderer2D = undefined;
+
+// Global camera state
+var global_camera: Camera2D = Camera2D.init();
 
 const Config = struct {
     print_perf: bool = false,
@@ -166,7 +170,7 @@ pub const core = struct {
         // Then poll events to fill the queues for this frame
         glfw_mod.pollEvents();
 
-        opengl_mod.c.ClearColor(0.2, 0.3, 0.3, 1);
+        opengl_mod.c.ClearColor(255.0, 255.0, 255.0, 1);
         opengl_mod.c.Clear(opengl_mod.c.COLOR_BUFFER_BIT);
     }
 
@@ -252,7 +256,7 @@ pub const drawing = struct {
             switch (cmd) {
                 .clipStart => |clip| {
                     if (renderer2D.rect_count > 0)
-                        renderer2D.flush();
+                        renderer2D.flushRectangles();
 
                     const bottom_left_y = @as(f32, @floatFromInt(window.windowSize()[1])) - clip.rect[3] - clip.rect[1];
                     const rect: [4]f32 = .{
@@ -265,7 +269,7 @@ pub const drawing = struct {
                     opengl_mod.clipStart(rect);
                 },
                 .clipEnd => {
-                    renderer2D.flush();
+                    renderer2D.flushRectangles();
                     opengl_mod.clipEnd();
                 },
                 .drawRect => |rect_cmd| {
@@ -764,6 +768,69 @@ fn deinitStandardCursors() void {
     standard_cursors = [_]?*glfw_mod.c.GLFWcursor{null} ** 8;
     cursors_initialized = false;
 }
+
+// =============================================================================
+// CAMERA
+// =============================================================================
+
+pub const camera = struct {
+    /// Begin camera mode - all subsequent drawing operations will be affected by the camera
+    pub fn begin() void {
+        const matrix = global_camera.getMatrix();
+        renderer2D.enableCamera(matrix);
+    }
+
+    /// End camera mode - return to normal screen-space rendering
+    pub fn end() void {
+        renderer2D.disableCamera();
+    }
+
+    /// Set the camera target (the point the camera looks at in world space)
+    pub fn setTarget(x: f32, y: f32) void {
+        global_camera.setTarget(x, y);
+    }
+
+    /// Set the camera offset (screen position)
+    pub fn setOffset(x: f32, y: f32) void {
+        global_camera.setOffset(x, y);
+    }
+
+    /// Set the zoom level (1.0 = normal, >1.0 = zoom in, <1.0 = zoom out)
+    pub fn setZoom(zoom: f32) void {
+        global_camera.setZoom(zoom);
+    }
+
+    /// Zoom towards a specific screen position (e.g., mouse cursor)
+    /// This keeps the world point under the screen position fixed while zooming
+    pub fn zoomTowards(new_zoom: f32, screen_x: f32, screen_y: f32) void {
+        global_camera.zoomTowards(new_zoom, screen_x, screen_y);
+    }
+
+    /// Set the rotation in radians
+    pub fn setRotation(rotation: f32) void {
+        global_camera.setRotation(rotation);
+    }
+
+    /// Smoothly track a target position
+    pub fn trackTarget(target_x: f32, target_y: f32, smooth_factor: f32) void {
+        global_camera.trackTarget(target_x, target_y, smooth_factor);
+    }
+
+    /// Get the current camera
+    pub fn get() *Camera2D {
+        return &global_camera;
+    }
+
+    /// Convert screen coordinates to world coordinates
+    pub fn screenToWorld(screen_x: f32, screen_y: f32) [2]f32 {
+        return global_camera.screenToWorld(screen_x, screen_y);
+    }
+
+    /// Convert world coordinates to screen coordinates
+    pub fn worldToScreen(world_x: f32, world_y: f32) [2]f32 {
+        return global_camera.worldToScreen(world_x, world_y);
+    }
+};
 
 pub const io = struct {
     pub const CursorIcon = enum(c_int) {
