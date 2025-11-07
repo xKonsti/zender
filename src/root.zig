@@ -127,12 +127,14 @@ pub const core = struct {
     /// Clean up zender resources
     /// Should be called when shutting down
     pub fn deinit() void {
+        renderer2D.deinit();
         font_mod.deinit();
         deinitStandardCursors();
         glfw_mod.deinit();
         window.deinit();
         program.deinit();
         opengl_mod.c.makeProcTableCurrent(null);
+        zlay.deinit();
     }
 
     /// Check if the window should close
