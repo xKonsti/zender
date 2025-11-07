@@ -195,9 +195,16 @@ const InstanceData = struct {
 };
 
 pub const MAX_RECTANGLES = 8192;
+pub const MAX_TRIANGLES = 2048;
+
+pub const TriangleVertex = struct {
+    pos: [2]f32,
+    color: [4]u8,
+};
 
 pub const Renderer2D = struct {
     program: Program,
+    triangle_program: Program,
     base_vbo: c_uint,
     base_ebo: c_uint,
     vao: c_uint,
@@ -214,7 +221,13 @@ pub const Renderer2D = struct {
     image_textures: std.StringHashMap(ImageTexture), // path -> texture
     current_image_id: ?c_uint,
 
-    pub fn init(allocator: std.mem.Allocator, program: Program) !Renderer2D {
+    // Triangle rendering
+    triangle_vao: c_uint,
+    triangle_vbo: c_uint,
+    triangle_vertices: [MAX_TRIANGLES * 3]TriangleVertex,
+    triangle_count: usize,
+
+    pub fn init(allocator: std.mem.Allocator, program: Program, triangle_program: Program) !Renderer2D {
         var vao: c_uint = undefined;
         c.GenVertexArrays(1, (&vao)[0..1]);
         c.BindVertexArray(vao); // Bind VAO first
@@ -291,6 +304,26 @@ pub const Renderer2D = struct {
         var atlas_texture: c_uint = undefined;
         c.GenTextures(1, (&atlas_texture)[0..1]);
 
+        // Setup triangle rendering (VAO and VBO)
+        var triangle_vao: c_uint = undefined;
+        c.GenVertexArrays(1, (&triangle_vao)[0..1]);
+        c.BindVertexArray(triangle_vao);
+
+        var triangle_vbo: c_uint = undefined;
+        c.GenBuffers(1, (&triangle_vbo)[0..1]);
+        c.BindBuffer(c.ARRAY_BUFFER, triangle_vbo);
+        c.BufferData(c.ARRAY_BUFFER, MAX_TRIANGLES * 3 * @sizeOf(TriangleVertex), null, c.DYNAMIC_DRAW);
+
+        // Triangle vertex attributes
+        const triangle_stride: c_uint = @sizeOf(TriangleVertex);
+        c.VertexAttribPointer(0, 2, c.FLOAT, c.FALSE, triangle_stride, @offsetOf(TriangleVertex, "pos"));
+        c.EnableVertexAttribArray(0);
+
+        c.VertexAttribPointer(1, 4, c.UNSIGNED_BYTE, c.TRUE, triangle_stride, @offsetOf(TriangleVertex, "color"));
+        c.EnableVertexAttribArray(1);
+
+        c.BindVertexArray(0);
+
         // Check for OpenGL errors
         if (c.GetError() != c.NO_ERROR) {
             std.log.err("OpenGL error during Renderer2D.init: {d}", .{c.GetError()});
@@ -299,6 +332,7 @@ pub const Renderer2D = struct {
 
         return .{
             .program = program,
+            .triangle_program = triangle_program,
             .base_vbo = base_vbo,
             .base_ebo = base_ebo,
             .vao = vao,
@@ -314,6 +348,11 @@ pub const Renderer2D = struct {
 
             .image_textures = .init(allocator),
             .current_image_id = null,
+
+            .triangle_vao = triangle_vao,
+            .triangle_vbo = triangle_vbo,
+            .triangle_vertices = undefined,
+            .triangle_count = 0,
         };
     }
 
@@ -331,6 +370,10 @@ pub const Renderer2D = struct {
         c.DeleteBuffers(1, (&self.base_ebo)[0..1]);
         c.DeleteTextures(1, (&self.atlas_texture)[0..1]);
 
+        // Delete triangle resources
+        c.DeleteVertexArrays(1, (&self.triangle_vao)[0..1]);
+        c.DeleteBuffers(1, (&self.triangle_vbo)[0..1]);
+
         var img_it = self.image_textures.iterator();
         while (img_it.next()) |entry| {
             entry.value_ptr.*.deinit();
@@ -340,6 +383,7 @@ pub const Renderer2D = struct {
 
     pub fn begin(self: *Renderer2D, window_size: [2]u32, window_scale: [2]f32) void {
         self.rect_count = 0;
+        self.triangle_count = 0;
         // reset per-frame caches
         self.shape_cache.beginFrame();
         c.BindVertexArray(self.vao);
@@ -602,6 +646,33 @@ pub const Renderer2D = struct {
         self.rect_count += 1;
     }
 
+    pub const TriangleConfig = struct {
+        color: [4]u8 = .{ 255, 255, 255, 255 },
+    };
+
+    pub fn drawTriangle(self: *Renderer2D, p1: [2]f32, p2: [2]f32, p3: [2]f32, config: TriangleConfig) void {
+        if (self.triangle_count >= MAX_TRIANGLES) {
+            std.log.warn("Triangle buffer full, skipping triangle", .{});
+            return;
+        }
+
+        const base_idx = self.triangle_count * 3;
+        self.triangle_vertices[base_idx] = .{
+            .pos = p1,
+            .color = config.color,
+        };
+        self.triangle_vertices[base_idx + 1] = .{
+            .pos = p2,
+            .color = config.color,
+        };
+        self.triangle_vertices[base_idx + 2] = .{
+            .pos = p3,
+            .color = config.color,
+        };
+
+        self.triangle_count += 1;
+    }
+
     pub fn drawText(self: *Renderer2D, window_scale: [2]f32, font_family: FontFamily, text: []const u8, x: f32, y: f32, size: f32, style: FontStyle, text_color: [4]u8) !void {
         // const now = std.time.milliTimestamp();
         // defer std.debug.print("drawText took {d}ms\n", .{std.time.milliTimestamp() - now});
@@ -742,8 +813,38 @@ pub const Renderer2D = struct {
         self.rect_count += 1;
     }
 
-    pub fn end(self: *Renderer2D) void {
+    pub fn flushTriangles(self: *Renderer2D, window_size: [2]u32, window_scale: [2]f32) void {
+        if (self.triangle_count == 0) return;
+
+        c.BindVertexArray(self.triangle_vao);
+        c.UseProgram(self.triangle_program.id);
+        c.Uniform4f(
+            self.triangle_program.uniformLocation("window_params"),
+            @floatFromInt(window_size[0]),
+            @floatFromInt(window_size[1]),
+            window_scale[0],
+            window_scale[1],
+        );
+
+        c.BindBuffer(c.ARRAY_BUFFER, self.triangle_vbo);
+        c.BufferSubData(
+            c.ARRAY_BUFFER,
+            0,
+            @intCast(self.triangle_count * 3 * @sizeOf(TriangleVertex)),
+            &self.triangle_vertices[0],
+        );
+
+        c.DrawArrays(c.TRIANGLES, 0, @intCast(self.triangle_count * 3));
+        self.triangle_count = 0;
+
+        if (c.GetError() != c.NO_ERROR) {
+            std.log.err("OpenGL error during flushTriangles: {d}", .{c.GetError()});
+        }
+    }
+
+    pub fn end(self: *Renderer2D, window_size: [2]u32, window_scale: [2]f32) void {
         self.flush();
+        self.flushTriangles(window_size, window_scale);
     }
 
     pub fn loadImage(self: *Renderer2D, path: []const u8) !ImageTexture {

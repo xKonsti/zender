@@ -111,7 +111,10 @@ pub const core = struct {
         program = try opengl_mod.Program.init(@embedFile("vert.glsl"), @embedFile("frag.glsl"));
         errdefer program.deinit();
 
-        renderer2D = try .init(alloc, program);
+        const triangle_program = try opengl_mod.Program.init(@embedFile("triangle_vert.glsl"), @embedFile("triangle_frag.glsl"));
+        errdefer triangle_program.deinit();
+
+        renderer2D = try .init(alloc, program, triangle_program);
         errdefer renderer2D.deinit();
 
         zlay.init(.{
@@ -238,7 +241,7 @@ pub const drawing = struct {
 
     /// flushes remaining draw calls for the frame
     pub fn end() void {
-        renderer2D.end();
+        renderer2D.end(window.windowSize(), window.getContentScale());
     }
 
     /// interop for drawing layout commands from the layout module
@@ -406,6 +409,10 @@ pub const drawing = struct {
 
     pub fn drawArc(center_x: f32, center_y: f32, radius: f32, config: Renderer2D.ArcConfig) void {
         renderer2D.drawArc(center_x, center_y, radius, config);
+    }
+
+    pub fn drawTriangle(p1: [2]f32, p2: [2]f32, p3: [2]f32, config: Renderer2D.TriangleConfig) void {
+        renderer2D.drawTriangle(p1, p2, p3, config);
     }
 
     /// Catmull-Rom spline interpolation

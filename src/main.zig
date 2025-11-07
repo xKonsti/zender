@@ -29,6 +29,28 @@ pub fn main() !void {
         zen.drawing.start();
         zen.drawing.drawLayout(interface_cmds);
 
+        // Draw some test triangles
+        zen.drawing.drawTriangle(
+            .{ 50, 500 },
+            .{ 150, 500 },
+            .{ 100, 400 },
+            .{ .color = .{ 255, 0, 0, 255 } },
+        );
+
+        zen.drawing.drawTriangle(
+            .{ 200, 500 },
+            .{ 300, 500 },
+            .{ 250, 400 },
+            .{ .color = .{ 0, 255, 0, 255 } },
+        );
+
+        zen.drawing.drawTriangle(
+            .{ 350, 500 },
+            .{ 450, 500 },
+            .{ 400, 400 },
+            .{ .color = .{ 0, 0, 255, 255 } },
+        );
+
         // Concrete wall - 45° single hatching
         zen.drawing.drawHatching(120, 100, 200, 400, .{
             .angle_deg = 45,
