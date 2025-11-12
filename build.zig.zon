@@ -47,7 +47,8 @@
             .path = "lib/harfbuzz",
         },
         .zlayout = .{
-            .path = "../zlayout",
+            .url = "git+https://github.com/xKonsti/zLayout#f85418da53efd980edb3eb060abdbf729b93580e",
+            .hash = "zlayout-0.0.0-lbFQ201tAQBRgZTajM1XlGWsfWIQEEuCPYTljxTif4Ud",
         },
     },
     .paths = .{
