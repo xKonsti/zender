@@ -1,0 +1,18 @@
+.{
+    .name = .harfbuzz,
+    .version = "8.2.2",
+    .minimum_zig_version = "0.15.1",
+    .dependencies = .{
+        .freetype = .{
+            .path = "../freetype_wrapper",
+        },
+        .harfbuzz_upstream = .{
+            .url = "git+https://github.com/harfbuzz/harfbuzz.git#80311aa92390ae9b5a782568302e531d378b6b01",
+            .hash = "N-V-__8AAINIjgWEUEglsRg1lilwkMVnA77UmBN6RcxHBaGL",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+    },
+}

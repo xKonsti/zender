@@ -41,10 +41,18 @@
             .hash = "zigglgen-0.4.0-bmyqLQGMLwA0EPVmSm-Nc6Olb84zBzvwMjguxwKYLf1S",
         },
         .freetype = .{
-            .path = "lib/freetype_c",
+            .path = "lib/freetype_wrapper",
+        },
+        .freetype_upstream = .{
+            .url = "git+https://gitlab.freedesktop.org/freetype/freetype.git#fc9cc5038e05edceec3d0f605415540ac76163e9",
+            .hash = "N-V-__8AAJ95qgCljw1jn5xMeR3IXfRyEfQQ04ViRmZzvT7f",
         },
         .harfbuzz = .{
-            .path = "lib/harfbuzz",
+            .path = "lib/harfbuzz_wrapper",
+        },
+        .harfbuzz_upstream = .{
+            .url = "git+https://github.com/harfbuzz/harfbuzz.git#80311aa92390ae9b5a782568302e531d378b6b01",
+            .hash = "N-V-__8AAINIjgWEUEglsRg1lilwkMVnA77UmBN6RcxHBaGL",
         },
         .zlayout = .{
             .url = "git+https://github.com/xKonsti/zLayout#f85418da53efd980edb3eb060abdbf729b93580e",
@@ -55,6 +63,7 @@
         "build.zig",
         "build.zig.zon",
         "src",
+        "lib",
         // For example...
         //"LICENSE",
         //"README.md",

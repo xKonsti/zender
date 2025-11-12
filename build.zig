@@ -56,9 +56,13 @@ fn addDependencies(
         .optimize = optimize,
     });
 
+    const freetype_upstream = b.dependency("freetype_upstream", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     mod.linkLibrary(freetype.artifact("freetype"));
-    mod.addIncludePath(freetype.path("include"));
-    // exe.root_module.addImport("freetype_c", freetype.module("freetype_mod"));
+    mod.addIncludePath(freetype_upstream.path("include"));
 
     mod.addCSourceFile(.{
         .file = b.path("lib/stb/stb_image_impl.c"),
@@ -70,7 +74,12 @@ fn addDependencies(
         .optimize = optimize,
     });
 
-    mod.addIncludePath(harfbuzz.path("src"));
+    const harfbuzz_upstream = b.dependency("harfbuzz_upstream", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    mod.addIncludePath(harfbuzz_upstream.path("src"));
     mod.linkLibrary(harfbuzz.artifact("harfbuzz"));
 
     const glfw = b.dependency("glfw_zig", .{

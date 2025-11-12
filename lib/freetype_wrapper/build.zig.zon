@@ -1,0 +1,15 @@
+.{
+    .name = .freetype,
+    .version = "2.13.3",
+    .minimum_zig_version = "0.15.1",
+    .dependencies = .{
+        .freetype_upstream = .{
+            .url = "git+https://gitlab.freedesktop.org/freetype/freetype.git#fc9cc5038e05edceec3d0f605415540ac76163e9",
+            .hash = "N-V-__8AAJ95qgCljw1jn5xMeR3IXfRyEfQQ04ViRmZzvT7f",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+    },
+}
