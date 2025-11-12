@@ -1,4 +1,153 @@
+# Zig Build Artifacts
 .zig-cache/
 zig-out/
-lib/
+build/
+*.o
+*.a
+*.so
+*.dylib
+*.lib
+*.dll
+
+# IDE & Editor Configuration
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vim/
+.emacs.d/
+*.sublime-project
+*.sublime-workspace
+.eclipse/
+.project
+.classpath
+.c9/
+*.iml
+.history/
+
+# OS & System Files
 .DS_Store
+.DS_Store?
+._*
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.env.local
+.env.*.local
+
+# Node/npm (if using build tools)
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Python & ML Related
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ML/AI Frameworks & Tools
+*.pb
+*.h5
+*.hdf5
+*.keras
+*.pth
+*.pt
+*.pkl
+*.pickle
+*.joblib
+*.onnx
+*.ckpt
+checkpoints/
+models/
+datasets/
+data/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Claude AI & LLM Files
+.claude/
+claude-cursor-history.txt
+.cursor/
+.aider/
+.continue/
+.jetbrains.sh
+*.md.backup
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+*.ipynb
+
+# TensorFlow/PyTorch specific
+*.tfevents.*
+runs/
+logs/
+outputs/
+artifacts/
+
+# Documentation build artifacts
+docs/_build/
+docs/.doctrees/
+site/
+
+# Local development
+*.local
+*.private
+.local/
+private/
+secrets/
+.env
+.env.*
+!.env.example
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.log
+debug.log
+error.log
+
+# Git merge/rebase artifacts
+*.orig
+*.rej
+
+# Package manager lockfiles (optional - uncomment if desired)
+# pnpm-lock.yaml
+# yarn.lock
+# Cargo.lock (if using Rust)
