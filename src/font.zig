@@ -38,6 +38,7 @@ pub fn deinit() void {
 /// Font family enum - add more font families here
 pub const FontFamily = enum {
     geist,
+    geist_mono,
     // Add more fonts as needed:
     // roboto,
     // inter,
@@ -53,6 +54,15 @@ pub const FontFamily = enum {
                 .bold => @embedFile("resources/Font/Geist/Geist-Bold.ttf"),
                 .extrabold => @embedFile("resources/Font/Geist/Geist-ExtraBold.ttf"),
                 .black => @embedFile("resources/Font/Geist/Geist-Black.ttf"),
+            },
+            .geist_mono => switch (style) {
+                .light => @embedFile("resources/Font/GeistMono/GeistMono-Light.ttf"),
+                .regular => @embedFile("resources/Font/GeistMono/GeistMono-Regular.ttf"),
+                .medium => @embedFile("resources/Font/GeistMono/GeistMono-Medium.ttf"),
+                .semibold => @embedFile("resources/Font/GeistMono/GeistMono-SemiBold.ttf"),
+                .bold => @embedFile("resources/Font/GeistMono/GeistMono-Bold.ttf"),
+                .extrabold => @embedFile("resources/Font/GeistMono/GeistMono-ExtraBold.ttf"),
+                .black => @embedFile("resources/Font/GeistMono/GeistMono-Black.ttf"),
             },
             // Add more font families:
             // .roboto => switch (style) { ... },

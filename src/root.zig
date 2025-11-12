@@ -344,9 +344,18 @@ pub const drawing = struct {
                     };
                     const text = text_cmd.text;
 
+                    const font_family: font_mod.FontFamily = switch (text_config.font_id) {
+                        0 => .geist,
+                        1 => .geist_mono,
+                        else => blk: {
+                            std.log.warn("font_id > 1 not supported yet, defaulting to geist", .{});
+                            break :blk .geist;
+                        },
+                    };
+
                     renderer2D.drawText(
                         window.getContentScale(),
-                        font_mod.FontFamily.geist,
+                        font_family,
                         text,
                         rect[0],
                         rect[1],
@@ -390,12 +399,9 @@ pub const drawing = struct {
     }
 
     pub fn drawLines(points: []const [2]f32, config: Renderer2D.LineConfig) void {
-        for (points, 0..) |p, i| {
-            if (i == 0) {
-                drawLine(p, points[1], config);
-            } else {
-                drawLine(points[i - 1], p, config);
-            }
+        if (points.len < 2) return;
+        for (points[0 .. points.len - 1], 0..) |p, i| {
+            drawLine(p, points[i + 1], config);
         }
     }
 
@@ -633,8 +639,11 @@ pub const drawing = struct {
         };
     }
 
-    pub fn drawText(window_scale: [2]f32, font_collection: FontFamily, text: []const u8, x: f32, y: f32, size: f32, style: FontStyle, text_color: Color) void {
-        renderer2D.drawText(window_scale, font_collection, text, x, y, size, style, text_color);
+    pub fn drawText(font_collection: FontFamily, text: []const u8, x: f32, y: f32, size: f32, style: FontStyle, text_color: Color) void {
+        const window_scale = renderer2D.window_scale;
+        renderer2D.drawText(window_scale, font_collection, text, x, y, size, style, text_color) catch |err| {
+            std.log.err("Failed to draw text: {s}", .{@errorName(err)});
+        };
     }
 
     pub fn drawImage(image: *const anyopaque, x: f32, y: f32, w: f32, h: f32, tint: Color) void {
@@ -1132,12 +1141,21 @@ pub fn measureText(text: []const u8, config: zlay.TextProps) zlay.Pair {
 
     const size: f32 = @floatFromInt(config.font_size);
 
-    // font_id currently only supports default (geist)
-    if (config.font_id != 0) {
-        std.log.warn("font_id != 0 not supported yet, defaulting to geist", .{});
-    }
+    const font_fam: font_mod.FontFamily = switch (config.font_id) {
+        0 => .geist,
+        1 => .geist_mono,
+        else => blk: {
+            std.log.warn("font_id > 1 not supported yet, defaulting to geist", .{});
+            break :blk .geist;
+        },
+    };
 
-    const font_obj = font_mod.getFont(.geist, style, size) catch |err| {
+    // font_id currently only supports default (geist)
+    // if (config.font_id != 0) {
+    //     std.log.warn("font_id != 0 not supported yet, defaulting to geist", .{});
+    // }
+
+    const font_obj = font_mod.getFont(font_fam, style, size) catch |err| {
         std.log.err("Failed to get font: {s}", .{@errorName(err)});
         return .{ 0, 0 };
     };

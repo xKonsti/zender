@@ -135,10 +135,11 @@ pub fn main() !void {
         //     .color = .{ 240, 0, 0, 255 },
         //     .stroke_width = 16.0,
         // });
-        // zen.drawing.drawRect(100, 400, 100, 100, .{
+        // zen.drawing.drawRect(10, 10, 400, 400, .{
         //     // .corner_radius = .{16} ** 4,
-        //     .color = .{ 200, 200, 200, 255 },
-        //     .rotation_deg = @floatFromInt(@mod(@divFloor(std.time.milliTimestamp() - now, 10), 360)),
+        //     .color = .{ 200, 0, 0, 255 },
+        //     .rotation_deg = 80,
+        //     .corner_radius = .{10} ** 4,
         // });
         // // Simple line
         // const mouse_pos = zen.io.getMousePosition();

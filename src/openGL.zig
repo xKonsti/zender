@@ -198,8 +198,8 @@ const InstanceData = struct {
     }
 };
 
-pub const MAX_RECTANGLES = 8192;
-pub const MAX_TRIANGLES = 2048;
+pub const MAX_RECTANGLES = 8192 * 2;
+pub const MAX_TRIANGLES = 8192 * 2;
 
 pub const TriangleVertex = struct {
     pos: [2]f32,
